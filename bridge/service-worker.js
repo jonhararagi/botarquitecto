@@ -257,14 +257,40 @@ async function finishTurn(jobId, ok, role, text, error) {
     return;
   }
 
-  state.awaitingCopyRole = role;
-  state.awaitingCopyText = result;
-  state.awaitingCopySince = Date.now();
+  const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
+
+  state.lastForwarded = result;
+  state.iteration += 1;
+  state.awaitingCopyRole = null;
+  state.awaitingCopyText = "";
+  state.awaitingCopySince = 0;
   state.awaitingCopyCheckpoint = 0;
-  state.status = "WAITING_COPY — copia el texto de " + role + " para continuar";
-  await addLog("BRIDGE", "Respuesta terminada y estable. Esperando copia explícita de " + role + ".");
+
+  await clearCopyAlarm("CEREBRO");
+  await clearCopyAlarm("OBRERO");
+
+  if (state.iteration >= state.maxIterations) {
+    state.running = false;
+    state.status = "LIMIT_REACHED — " + state.iteration + " iteraciones";
+    await saveState();
+    return;
+  }
+
+  if (state.paused) {
+    state.status = "PAUSED — siguiente: " + nextRole;
+    await saveState();
+    return;
+  }
+
+  state.status = "AUTO_FORWARD — " + role + " → " + nextRole;
+  await addLog("BRIDGE", "Respuesta verificada. Enviando automáticamente a " + nextRole + ".");
   await saveState();
-  await scheduleNextCopyCheckpoint();
+
+  try {
+    await dispatchTurn(nextRole, result);
+  } catch (error) {
+    await failRun(error.message || String(error));
+  }
 }
 
 async function handleExplicitCopy(senderTabId, copiedText) {
