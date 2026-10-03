@@ -7,31 +7,21 @@ const workerTimeout = document.getElementById("workerTimeout");
 const minTurnDelay = document.getElementById("minTurnDelay");
 const status = document.getElementById("status");
 const log = document.getElementById("log");
+const startButton = document.getElementById("start");
 
-let running = false;
-let paused = false;
-let stopRequested = false;
-let iteration = 0;
-let lastForwarded = "";
+let pollTimer = null;
+let lastRenderedLog = "";
 
-function setStatus(text) { status.textContent = text; }
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function ensureTabAlive(tabId, role) {
-  try {
-    const tab = await chrome.tabs.get(Number(tabId));
-    if (!tab) throw new Error("Tab not found");
-    if (!tab.url || !/^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(tab.url)) {
-      throw new Error(role + " ya no es una pestaña ChatGPT");
-    }
-  } catch (e) {
-    throw new Error(role + " no está disponible: " + (e.message || String(e)));
-  }
+function setStatus(text) {
+  status.textContent = text;
 }
 
 function addLog(role, text) {
   const item = document.createElement("div");
-  item.className = "msg " + (role === "CEREBRO" ? "brain" : role === "OBRERO" ? "worker" : "system");
+  item.className = "msg " + (
+    role === "CEREBRO" ? "brain" :
+    role === "OBRERO" ? "worker" : "system"
+  );
 
   const who = document.createElement("div");
   who.className = "who";
@@ -42,18 +32,56 @@ function addLog(role, text) {
 
   item.append(who, body);
   log.appendChild(item);
-  log.scrollTop = log.scrollHeight;
 }
 
-function clearLog() {
-  log.replaceChildren();
+function renderState(state) {
+  if (!state) return;
+
+  setStatus(state.status || "IDLE");
+
+  const serializedLog = JSON.stringify(state.log || []);
+  if (serializedLog !== lastRenderedLog) {
+    lastRenderedLog = serializedLog;
+    log.replaceChildren();
+
+    for (const entry of state.log || []) {
+      addLog(entry.role, entry.text);
+    }
+
+    log.scrollTop = log.scrollHeight;
+  }
+
+  const active = Boolean(state.running);
+  startButton.disabled = active;
+  brain.disabled = active;
+  worker.disabled = active;
+  iterations.disabled = active;
+  brainTimeout.disabled = active;
+  workerTimeout.disabled = active;
+  minTurnDelay.disabled = active;
+
+  if (state.brainTabId && [...brain.options].some(o => o.value === String(state.brainTabId))) {
+    brain.value = String(state.brainTabId);
+  }
+  if (state.workerTabId && [...worker.options].some(o => o.value === String(state.workerTabId))) {
+    worker.value = String(state.workerTabId);
+  }
+}
+
+async function send(message) {
+  const response = await chrome.runtime.sendMessage(message);
+  if (!response?.ok) throw new Error(response?.error || "BRIDGE rechazó la operación");
+  if (response.state) renderState(response.state);
+  return response;
 }
 
 async function refreshTabs() {
-  const response = await chrome.runtime.sendMessage({ type: "LIST_CHATGPT_TABS" });
-  if (!response?.ok) throw new Error(response?.error || "No se pudieron obtener las pestañas");
-
+  const response = await send({ type: "LIST_CHATGPT_TABS" });
   const tabs = response.tabs || [];
+
+  const oldBrain = brain.value;
+  const oldWorker = worker.value;
+
   brain.replaceChildren();
   worker.replaceChildren();
 
@@ -63,122 +91,72 @@ async function refreshTabs() {
     worker.add(new Option(label, String(tab.id)));
   }
 
-  if (tabs.length >= 2) {
-    brain.value = String(tabs[0].id);
-    worker.value = String(tabs[1].id);
-  }
-  setStatus("IDLE — " + tabs.length + " pestañas ChatGPT detectadas");
+  if ([...brain.options].some(o => o.value === oldBrain)) brain.value = oldBrain;
+  if ([...worker.options].some(o => o.value === oldWorker)) worker.value = oldWorker;
+
+  if (!brain.value && tabs.length >= 1) brain.value = String(tabs[0].id);
+  if (!worker.value && tabs.length >= 2) worker.value = String(tabs[1].id);
+
+  const state = response.state;
+  if (state?.brainTabId) brain.value = String(state.brainTabId);
+  if (state?.workerTabId) worker.value = String(state.workerTabId);
+
+  renderState(state);
 }
 
-async function sendAndWait(tabId, text, timeoutMs, minTurnDelayMs) {
-  await ensureTabAlive(tabId, "ChatGPT");
-  let response;
+async function pollState() {
   try {
-    response = await chrome.tabs.sendMessage(Number(tabId), {
-      type: "SEND_AND_WAIT",
-      text,
-      timeoutMs,
-      minTurnDelayMs
+    const response = await chrome.runtime.sendMessage({ type: "GET_STATE" });
+    if (response?.ok) renderState(response.state);
+  } catch {
+    // La ventana de control puede perder momentáneamente el service worker.
+    // El proceso no depende de esta ventana; el siguiente sondeo lo recupera.
+  }
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollState, 700);
+  pollState();
+}
+
+document.getElementById("refresh").onclick = () => {
+  refreshTabs().catch(e => setStatus("ERROR — " + e.message));
+};
+
+startButton.onclick = async () => {
+  try {
+    if (!brain.value || !worker.value) throw new Error("Selecciona CEREBRO y OBRERO");
+    if (brain.value === worker.value) throw new Error("CEREBRO y OBRERO deben ser pestañas distintas");
+    if (!seed.value.trim()) throw new Error("Escribe el mensaje inicial");
+
+    await send({
+      type: "START_LOOP",
+      brainTabId: Number(brain.value),
+      workerTabId: Number(worker.value),
+      seed: seed.value.trim(),
+      maxIterations: Number(iterations.value) || 10,
+      brainTimeoutMs: (Number(brainTimeout.value) || 120) * 1000,
+      workerTimeoutMs: (Number(workerTimeout.value) || 900) * 1000,
+      minTurnDelayMs: (Number(minTurnDelay.value) || 10) * 1000
     });
   } catch (e) {
-    throw new Error("No se pudo comunicar con la pestaña: " + (e.message || String(e)) + ". Recarga la pestaña ChatGPT para cargar BRIDGE.");
+    setStatus("ERROR — " + e.message);
   }
-  if (!response?.ok) throw new Error(response?.error || "La pestaña no pudo completar la operación");
-  return response.text;
-}
+};
 
-async function waitIfPaused() {
-  while (paused && !stopRequested) {
-    setStatus("PAUSED — iteración " + iteration);
-    await sleep(200);
-  }
-  if (stopRequested) throw new Error("STOPPED");
-}
-
-async function runLoop() {
-  if (running) return;
-  if (!brain.value || !worker.value) throw new Error("Selecciona CEREBRO y OBRERO");
-  if (brain.value === worker.value) throw new Error("CEREBRO y OBRERO deben ser pestañas distintas");
-  if (!seed.value.trim()) throw new Error("Escribe el mensaje inicial");
-
-  running = true;
-  paused = false;
-  stopRequested = false;
-  iteration = 0;
-  lastForwarded = "";
-  clearLog();
-
-  const maxIterations = Math.max(1, Math.min(100, Number(iterations.value) || 10));
-  const brainTimeoutMs = Math.max(5000, Math.min(1800000, (Number(brainTimeout.value) || 120) * 1000));
-  const workerTimeoutMs = Math.max(5000, Math.min(1800000, (Number(workerTimeout.value) || 900) * 1000));
-  const minTurnDelayMs = Math.max(0, Math.min(60000, (Number(minTurnDelay.value) || 0) * 1000));
-
-  try {
-    let message = seed.value.trim();
-    let target = Number(brain.value);
-    addLog("USUARIO", message);
-
-    while (!stopRequested && iteration < maxIterations) {
-      await waitIfPaused();
-
-      const isBrain = target === Number(brain.value);
-      const role = isBrain ? "CEREBRO" : "OBRERO";
-      const timeoutMs = isBrain ? brainTimeoutMs : workerTimeoutMs;
-
-      addLog("BRIDGE", "Enviando a " + role + "...");
-      setStatus("RUNNING — enviando a " + role + " — iteración " + (iteration + 1));
-
-      const result = (await sendAndWait(target, message, timeoutMs, minTurnDelayMs)).trim();
-      if (!result) throw new Error("Respuesta vacía");
-
-      addLog(role, result);
-
-      if (result === "TRABAJO TERMINADO") {
-        setStatus("FINISHED — TRABAJO TERMINADO");
-        return;
-      }
-
-      if (result === lastForwarded) {
-        throw new Error("Respuesta duplicada detectada");
-      }
-
-      lastForwarded = result;
-      message = result;
-      iteration += 1;
-      target = isBrain ? Number(worker.value) : Number(brain.value);
-    }
-
-    if (stopRequested) setStatus("STOPPED");
-    else setStatus("LIMIT_REACHED — " + iteration + " iteraciones");
-  } catch (error) {
-    if (error.message === "STOPPED") setStatus("STOPPED");
-    else {
-      addLog("BRIDGE", "ERROR — " + error.message);
-      setStatus("ERROR — " + error.message);
-    }
-  } finally {
-    running = false;
-  }
-}
-
-document.getElementById("refresh").onclick = () => refreshTabs().catch(e => setStatus("ERROR — " + e.message));
-document.getElementById("start").onclick = () => runLoop().catch(e => setStatus("ERROR — " + e.message));
 document.getElementById("pause").onclick = () => {
-  if (running) {
-    paused = true;
-    setStatus("PAUSED — iteración " + iteration);
-  }
-};
-document.getElementById("resume").onclick = () => {
-  if (running) {
-    paused = false;
-    setStatus("RUNNING — iteración " + iteration);
-  }
-};
-document.getElementById("stop").onclick = () => {
-  stopRequested = true;
-  paused = false;
-  if (!running) setStatus("STOPPED");
+  send({ type: "PAUSE" }).catch(e => setStatus("ERROR — " + e.message));
 };
 
-refreshTabs().catch(e => setStatus("ERROR — " + e.message));
+document.getElementById("resume").onclick = () => {
+  send({ type: "RESUME" }).catch(e => setStatus("ERROR — " + e.message));
+};
+
+document.getElementById("stop").onclick = () => {
+  send({ type: "STOP" }).catch(e => setStatus("ERROR — " + e.message));
+};
+
+refreshTabs()
+  .catch(e => setStatus("ERROR — " + e.message))
+  .finally(startPolling);
