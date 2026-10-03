@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Bridge — ChatGPT Loop",
-  "version": "0.6.0",
-  "description": "Multi-session local bridge for independent CEREBRO/OBRERO ChatGPT tabs.",
+  "version": "0.7.0",
+  "description": "Browser-only multi-session bridge for independent CEREBRO/OBRERO ChatGPT tabs.",
   "permissions": [
     "tabs",
     "storage"
