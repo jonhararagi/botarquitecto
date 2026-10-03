@@ -473,6 +473,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
+    if (message?.type === "RESET_STATE") {
+      if (state.running) throw new Error("Detén BRIDGE antes de limpiar el historial");
+      await clearCopyAlarm("CEREBRO");
+      await clearCopyAlarm("OBRERO");
+      state = { ...DEFAULT_STATE };
+      await saveState();
+      sendResponse({ ok: true, state: snapshot() });
+      return;
+    }
+
     if (message?.type === "GET_STATE") {
       sendResponse({ ok: true, state: snapshot() });
       return;
