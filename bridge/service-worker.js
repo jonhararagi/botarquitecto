@@ -6,8 +6,7 @@ const CHATGPT_PATTERNS = [
 const STORAGE_KEY = "bridgeStateV4";
 const LEGACY_STORAGE_KEY = "bridgeStateV3";
 
-// La espera de copia es independiente del tiempo de generación.
-// Primer mini-análisis a los 30 s y timeout máximo de copia a los 120 s.
+// Los checkpoints quedan como compatibilidad con el estado anterior; el flujo normal ya autoenvía al detectar la respuesta completa.
 const COPY_CHECKPOINTS_MS = {
   CEREBRO: [15000, 60000],
   OBRERO: [30000, 600000]
@@ -428,9 +427,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.brainTabId = Number(message.brainTabId) || state.brainTabId;
       state.workerTabId = Number(message.workerTabId) || state.workerTabId;
       state.maxIterations = Math.max(1, Math.min(100, Number(message.maxIterations) || 10));
-      state.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 120000));
-      state.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 900000));
-      state.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 10000));
+      state.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
+      state.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
+      state.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
       state.running = true;
       state.paused = false;
       state.stopRequested = false;
