@@ -12,6 +12,8 @@ const SEND_SELECTORS = [
   "button.composer-submit-btn"
 ];
 
+const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
+
 let activeJobId = null;
 
 function firstVisible(selectors) {
@@ -65,8 +67,6 @@ function reportExplicitCopy() {
   const copiedText = String(selection?.toString() || "").trim();
   const latestNode = getLatestAssistantNode();
 
-  // BRIDGE only reacts to a real user selection/copy inside the latest
-  // completed assistant response. It never treats typing or DOM changes as commands.
   if (!copiedText || !selectionBelongsToNode(selection, latestNode)) return;
 
   chrome.runtime.sendMessage({
@@ -125,6 +125,54 @@ async function waitForSendButton(timeoutMs) {
   throw new Error("ChatGPT send button not found or disabled");
 }
 
+function stripBridgeMarker(text) {
+  const value = String(text || "").trim();
+  const index = value.lastIndexOf(BRIDGE_DONE_MARKER);
+  if (index === -1) return value;
+  return value.slice(0, index).trim();
+}
+
+function hasBridgeMarker(text) {
+  return String(text || "").includes(BRIDGE_DONE_MARKER);
+}
+
+async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
+  let lastText = "";
+  let stableSince = 0;
+  let sawMarker = false;
+
+  while (Date.now() - sentAt < timeoutMs) {
+    const latestNode = getLatestAssistantNode();
+    const current = getAssistantText(latestNode);
+    const isNewNode = latestNode && latestNode !== beforeNode;
+    const isUpdatedResponse = current && current !== beforeText;
+    const hasNewResponse = Boolean(current && (isNewNode || isUpdatedResponse));
+
+    if (hasNewResponse) {
+      if (hasBridgeMarker(current)) sawMarker = true;
+
+      if (current !== lastText) {
+        lastText = current;
+        stableSince = Date.now();
+      } else if (
+        stableSince &&
+        Date.now() - stableSince >= 30000 &&
+        Date.now() - sentAt >= minTurnDelayMs &&
+        sawMarker
+      ) {
+        return stripBridgeMarker(current);
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 250));
+  }
+
+  if (sawMarker) {
+    throw new Error("[[BRIDGE_DONE]] detectado, pero la respuesta no quedó estable dentro del timeout");
+  }
+  throw new Error("Timeout esperando [[BRIDGE_DONE]] y respuesta completa");
+}
+
 async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
   const input = await waitForInput(10000);
   const beforeNode = getLatestAssistantNode();
@@ -135,35 +183,7 @@ async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
   const button = await waitForSendButton(10000);
   button.click();
 
-  const sentAt = Date.now();
-  const stableRequiredMs = 1800;
-  let lastText = "";
-  let stableSince = 0;
-
-  while (Date.now() - sentAt < timeoutMs) {
-    const latestNode = getLatestAssistantNode();
-    const current = getAssistantText(latestNode);
-    const isNewNode = latestNode && latestNode !== beforeNode;
-    const isUpdatedResponse = current && current !== beforeText;
-    const hasNewResponse = Boolean(current && (isNewNode || isUpdatedResponse));
-
-    if (hasNewResponse) {
-      if (current !== lastText) {
-        lastText = current;
-        stableSince = Date.now();
-      } else if (
-        stableSince &&
-        Date.now() - stableSince >= stableRequiredMs &&
-        Date.now() - sentAt >= minTurnDelayMs
-      ) {
-        return current;
-      }
-    }
-
-    await new Promise(r => setTimeout(r, 250));
-  }
-
-  throw new Error("Timeout waiting for complete ChatGPT response");
+  return waitForStableCompletedResponse(beforeNode, beforeText, Date.now(), timeoutMs, minTurnDelayMs);
 }
 
 async function runTurn(message) {
