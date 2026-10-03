@@ -110,7 +110,8 @@ async function dispatchTurn(role, text) {
       jobId,
       text,
       timeoutMs,
-      minTurnDelayMs: state.minTurnDelayMs
+      minTurnDelayMs: state.minTurnDelayMs,
+      role
     });
   } catch (error) {
     throw new Error(
