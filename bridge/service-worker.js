@@ -21,7 +21,7 @@ async function hydrate() {
   if (saved?.[STORAGE_KEY]?.sessions) state = saved[STORAGE_KEY];
   if (!Array.isArray(state.sessions)) state.sessions = [];
   if (!state.sessions.length) {
-    const s = createSession();
+    const s = createSessionModel("Sesión 1");
     state.sessions.push(s);
     state.activeSessionId = s.id;
   }
@@ -94,9 +94,6 @@ async function createSession(name) {
   const s = createSessionObject(name);
   state.sessions.push(s); state.activeSessionId = s.id; await saveState(); return s;
 }
-function createSessionObject(name) { return createSessionModel(name || "Sesión " + (state.sessions.length + 1)); }
-function createSessionModel(name) { return { ...createSession(name), _unused: undefined }; }
-
 async function removeSession(id) {
   const s = getSession(id);
   if (!s) throw new Error("Sesión no encontrada");
@@ -116,10 +113,17 @@ chrome.tabs.onRemoved.addListener(async tabId => {
 
 chrome.action.onClicked.addListener(async () => {
   await hydrate();
-  const windows = await chrome.windows.getAll({ populate: true });
-  const existing = windows.flatMap(w => w.tabs || []).find(t => typeof t.url === "string" && t.url.startsWith(chrome.runtime.getURL("control.html")));
-  if (existing) { await chrome.windows.update(existing.windowId, { focused: true, state: "normal" }); return; }
-  await chrome.windows.create({ url: chrome.runtime.getURL("control.html"), type: "popup", width: 760, height: 820 });
+  const controlUrl = chrome.runtime.getURL("control.html");
+  const tabs = await chrome.tabs.query({});
+  const existing = tabs.find(tab => tab.url === controlUrl);
+
+  if (existing?.id) {
+    await chrome.tabs.update(existing.id, { active: true });
+    await chrome.windows.update(existing.windowId, { focused: true });
+    return;
+  }
+
+  await chrome.tabs.create({ url: controlUrl, active: true });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -151,8 +155,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "START_LOOP") {
       const s = getSession(String(message.sessionId || "")); if (!s) throw new Error("Sesión no encontrada");
       if (s.running) throw new Error("Esta sesión ya está activa");
+      const requestedBrainTabId = Number(message.brainTabId) || s.brainTabId;
+      const requestedWorkerTabId = Number(message.workerTabId) || s.workerTabId;
+      if (!requestedBrainTabId || !requestedWorkerTabId || requestedBrainTabId === requestedWorkerTabId) {
+        throw new Error("CEREBRO y OBRERO deben ser dos pestañas ChatGPT distintas");
+      }
+      for (const other of state.sessions) {
+        if (other.id === s.id || !other.running) continue;
+        if ([other.brainTabId, other.workerTabId].includes(requestedBrainTabId) ||
+            [other.brainTabId, other.workerTabId].includes(requestedWorkerTabId)) {
+          throw new Error("Una de las pestañas seleccionadas ya está ocupada por otra sesión activa");
+        }
+      }
       const seed = String(message.seed || "").trim(); if (!seed) throw new Error("Escribe el mensaje inicial");
-      s.brainTabId = Number(message.brainTabId) || s.brainTabId; s.workerTabId = Number(message.workerTabId) || s.workerTabId;
+      s.brainTabId = requestedBrainTabId; s.workerTabId = requestedWorkerTabId;
       s.maxIterations = Math.max(1, Math.min(100, Number(message.maxIterations) || 10));
       s.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
       s.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
