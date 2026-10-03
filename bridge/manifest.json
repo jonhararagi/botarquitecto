@@ -1,12 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Bridge — ChatGPT Loop",
-  "version": "0.4.0",
-  "description": "Local control window for relaying messages between two normal ChatGPT tabs.",
+  "version": "0.6.0",
+  "description": "Multi-session local bridge for independent CEREBRO/OBRERO ChatGPT tabs.",
   "permissions": [
     "tabs",
-    "storage",
-    "alarms"
+    "storage"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
