@@ -17,6 +17,18 @@ let lastForwarded = "";
 function setStatus(text) { status.textContent = text; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+async function ensureTabAlive(tabId, role) {
+  try {
+    const tab = await chrome.tabs.get(Number(tabId));
+    if (!tab) throw new Error("Tab not found");
+    if (!tab.url || !/^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(tab.url)) {
+      throw new Error(role + " ya no es una pestaña ChatGPT");
+    }
+  } catch (e) {
+    throw new Error(role + " no está disponible: " + (e.message || String(e)));
+  }
+}
+
 function addLog(role, text) {
   const item = document.createElement("div");
   item.className = "msg " + (role === "CEREBRO" ? "brain" : role === "OBRERO" ? "worker" : "system");
@@ -59,12 +71,18 @@ async function refreshTabs() {
 }
 
 async function sendAndWait(tabId, text, timeoutMs, minTurnDelayMs) {
-  const response = await chrome.tabs.sendMessage(Number(tabId), {
-    type: "SEND_AND_WAIT",
-    text,
-    timeoutMs,
-    minTurnDelayMs
-  });
+  await ensureTabAlive(tabId, "ChatGPT");
+  let response;
+  try {
+    response = await chrome.tabs.sendMessage(Number(tabId), {
+      type: "SEND_AND_WAIT",
+      text,
+      timeoutMs,
+      minTurnDelayMs
+    });
+  } catch (e) {
+    throw new Error("No se pudo comunicar con la pestaña: " + (e.message || String(e)) + ". Recarga la pestaña ChatGPT para cargar BRIDGE.");
+  }
   if (!response?.ok) throw new Error(response?.error || "La pestaña no pudo completar la operación");
   return response.text;
 }
