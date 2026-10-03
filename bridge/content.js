@@ -190,7 +190,39 @@ async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
   insertText(input, text);
 
   const button = await waitForSendButton(10000);
-  button.click();
+  if (button) {
+    button.click();
+  } else {
+    input.focus();
+    const eventInit = {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+      code: "Enter",
+      keyCode: 13,
+      which: 13
+    };
+    input.dispatchEvent(new KeyboardEvent("keydown", eventInit));
+    input.dispatchEvent(new KeyboardEvent("keypress", eventInit));
+    input.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+
+    const confirmStarted = Date.now();
+    let started = false;
+    while (Date.now() - confirmStarted < 3000) {
+      const latest = getLatestAssistantNode();
+      const current = getAssistantText(latest);
+      const stopVisible = Boolean(firstVisible(STOP_SELECTORS));
+      if (latest !== beforeNode || current !== beforeText || stopVisible) {
+        started = true;
+        break;
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    if (!started) {
+      throw new Error("No se pudo activar el envío de ChatGPT: botón no encontrado y Enter no inició la generación");
+    }
+  }
 
   return waitForStableCompletedResponse(
     beforeNode,
