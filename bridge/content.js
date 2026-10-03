@@ -121,7 +121,9 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   let stableSince = 0;
   let sawNewResponse = false;
 
-  while (Date.now() - sentAt < timeoutMs) {
+  const deadline = sentAt + timeoutMs + RESPONSE_STABLE_MS;
+
+  while (Date.now() < deadline) {
     const latestNode = getLatestAssistantNode();
     const current = getAssistantText(latestNode);
     const isNewNode = latestNode && latestNode !== beforeNode;
