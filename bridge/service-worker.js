@@ -6,9 +6,11 @@ const CHATGPT_PATTERNS = [
 const STORAGE_KEY = "bridgeStateV4";
 const LEGACY_STORAGE_KEY = "bridgeStateV3";
 
+// La espera de copia es independiente del tiempo de generación del mensaje.
+// Se hace un mini-análisis a los 60 s y se corta como máximo a los 120 s.
 const COPY_CHECKPOINTS_MS = {
-  CEREBRO: [60000, 300000, 600000],
-  OBRERO: [300000, 600000, 900000]
+  CEREBRO: [60000, 120000],
+  OBRERO: [60000, 120000]
 };
 
 const DEFAULT_STATE = {
