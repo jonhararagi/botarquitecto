@@ -15,7 +15,7 @@ MVP local para hacer conversar dos pestañas normales de ChatGPT del mismo Chrom
 - Espera la respuesta completa.
 - Alterna entre ambas pestañas.
 - Detecta respuestas duplicadas.
-- Tiene timeout por respuesta.
+- Usa timeouts de seguridad independientes: CEREBRO 120 s y OBRERO 900 s por defecto.
 - Permite PAUSAR, CONTINUAR y DETENER.
 - Tiene límite de iteraciones.
 - Si una respuesta es exactamente `TRABAJO TERMINADO`, termina con estado `FINISHED`.
@@ -36,7 +36,7 @@ MVP local para hacer conversar dos pestañas normales de ChatGPT del mismo Chrom
 
 Esta versión usa el DOM de ChatGPT desde content scripts. Los selectores están preparados con varios fallbacks, pero ChatGPT puede cambiar su interfaz.
 
-La detección de respuesta espera que aparezca una respuesta nueva y que su texto permanezca estable durante aproximadamente 1.4 segundos antes de devolverla.
+No hay una espera fija entre turnos: la respuesta se reenvía cuando aparece una respuesta nueva y su texto permanece estable durante aproximadamente 1.4 segundos. Los timeouts solo son límites máximos de seguridad.
 
 ## Estado de verificación
 
