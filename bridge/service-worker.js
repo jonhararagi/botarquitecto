@@ -239,7 +239,6 @@ async function handleExplicitCopy(senderTabId, copiedText) {
     return { ok: false, error: error.message || String(error) };
   }
 }
-}
 
 chrome.runtime.onInstalled.addListener(async () => {
   await hydrate();
