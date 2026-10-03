@@ -19,6 +19,7 @@ const STOP_SELECTORS = [
 ];
 
 const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
+const STABILITY_WINDOW_MS = 30000;
 
 let activeJobId = null;
 
@@ -60,26 +61,6 @@ function getAssistantText(node) {
   const body = node.querySelector(".markdown, [data-markdown-text-style='assistant-message']");
   return (body?.innerText || node.innerText || node.textContent || "").trim();
 }
-
-function selectionBelongsToNode(selection, node) {
-  if (!selection || selection.rangeCount === 0 || !node) return false;
-  return node.contains(selection.getRangeAt(0).commonAncestorContainer);
-}
-
-function reportExplicitCopy() {
-  const selection = window.getSelection();
-  const copiedText = String(selection?.toString() || "").trim();
-  const latestNode = getLatestAssistantNode();
-  if (!copiedText || !selectionBelongsToNode(selection, latestNode)) return;
-
-  chrome.runtime.sendMessage({
-    type: "EXPLICIT_COPY",
-    text: copiedText,
-    role: "ChatGPT"
-  }).catch(() => {});
-}
-
-document.addEventListener("copy", reportExplicitCopy, true);
 
 function insertText(element, text) {
   element.focus();
@@ -148,7 +129,12 @@ async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, ti
   let sawMarker = false;
   let sawCompletedUi = false;
 
-  while (Date.now() - sentAt < timeoutMs) {
+  // timeoutMs measures generation/response time. The stability window is an
+  // additional verification grace period, so a response finishing near the
+  // configured timeout is not falsely rejected while we verify stability.
+  const deadline = sentAt + timeoutMs + STABILITY_WINDOW_MS;
+
+  while (Date.now() < deadline) {
     const latestNode = getLatestAssistantNode();
     const current = getAssistantText(latestNode);
     const isNewNode = latestNode && latestNode !== beforeNode;
@@ -164,7 +150,7 @@ async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, ti
         stableSince = Date.now();
       } else if (
         stableSince &&
-        Date.now() - stableSince >= 30000 &&
+        Date.now() - stableSince >= STABILITY_WINDOW_MS &&
         Date.now() - sentAt >= minTurnDelayMs &&
         (sawMarker || sawCompletedUi)
       ) {
