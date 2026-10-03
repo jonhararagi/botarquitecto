@@ -20,6 +20,8 @@ const DEFAULT_STATE = {
   lastForwarded: "",
   activeRole: null,
   activeJobId: null,
+  awaitingCopyRole: null,
+  awaitingCopyText: "",
   log: []
 };
 
@@ -127,6 +129,8 @@ async function failRun(message) {
   state.running = false;
   state.activeRole = null;
   state.activeJobId = null;
+  state.awaitingCopyRole = null;
+  state.awaitingCopyText = "";
   state.status = "ERROR — " + message;
   await addLog("BRIDGE", "ERROR — " + message);
   await saveState();
@@ -167,31 +171,74 @@ async function finishTurn(jobId, ok, role, text, error) {
     return;
   }
 
-  state.lastForwarded = result;
+  // Important: a completed response is NOT forwarded automatically.
+  // BRIDGE waits for the user to explicitly copy text from this assistant response.
+  state.awaitingCopyRole = role;
+  state.awaitingCopyText = result;
+  state.status = "WAITING_COPY — copia el texto de " + role + " para continuar";
+  await addLog("BRIDGE", "Respuesta terminada. Esperando copia explícita de " + role + ".");
+  await saveState();
+}
+
+async function handleExplicitCopy(senderTabId, copiedText) {
+  await hydrate();
+
+  if (!state.running || !state.awaitingCopyRole || !state.awaitingCopyText) {
+    return { ok: false, ignored: true, reason: "No hay una respuesta esperando copia" };
+  }
+
+  const expectedTabId = state.awaitingCopyRole === "CEREBRO"
+    ? state.brainTabId
+    : state.workerTabId;
+
+  if (senderTabId !== expectedTabId) {
+    return { ok: false, ignored: true, reason: "La copia no proviene de la pestaña que está esperando BRIDGE" };
+  }
+
+  const copied = String(copiedText || "").trim();
+  if (!copied) {
+    return { ok: false, ignored: true, reason: "Copia vacía" };
+  }
+
+  // The copied text must actually exist in the completed assistant response.
+  // This prevents copying a word typed by the user from becoming a command.
+  if (!state.awaitingCopyText.includes(copied)) {
+    return { ok: false, ignored: true, reason: "El texto copiado no pertenece a la respuesta del asistente" };
+  }
+
+  const role = state.awaitingCopyRole;
+  const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
+
+  state.lastForwarded = copied;
   state.iteration += 1;
+  state.awaitingCopyRole = null;
+  state.awaitingCopyText = "";
+
+  await addLog("COPIA", copied);
 
   if (state.iteration >= state.maxIterations) {
     state.running = false;
     state.status = "LIMIT_REACHED — " + state.iteration + " iteraciones";
     await saveState();
-    return;
+    return { ok: true, forwarded: false, finished: true };
   }
-
-  const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
 
   if (state.paused) {
     state.status = "PAUSED — siguiente: " + nextRole;
     await saveState();
-    return;
+    return { ok: true, forwarded: false, paused: true };
   }
 
   await saveState();
 
   try {
-    await dispatchTurn(nextRole, result);
-  } catch (nextError) {
-    await failRun(nextError.message || String(nextError));
+    await dispatchTurn(nextRole, copied);
+    return { ok: true, forwarded: true, nextRole };
+  } catch (error) {
+    await failRun(error.message || String(error));
+    return { ok: false, error: error.message || String(error) };
   }
+}
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -271,6 +318,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.lastForwarded = "";
       state.activeRole = null;
       state.activeJobId = null;
+      state.awaitingCopyRole = null;
+      state.awaitingCopyText = "";
       state.log = [];
       state.status = "STARTING";
       await saveState();
@@ -315,6 +364,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.paused = false;
       state.activeJobId = null;
       state.activeRole = null;
+      state.awaitingCopyRole = null;
+      state.awaitingCopyText = "";
       state.status = "STOPPED";
       await saveState();
       sendResponse({ ok: true, state: snapshot() });
@@ -323,6 +374,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message?.type === "GET_STATE") {
       sendResponse({ ok: true, state: snapshot() });
+      return;
+    }
+
+    if (message?.type === "EXPLICIT_COPY") {
+      const result = await handleExplicitCopy(
+        sender.tab?.id ?? null,
+        message.text
+      );
+      sendResponse(result);
       return;
     }
 
