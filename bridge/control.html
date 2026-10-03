@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BRIDGE</title>
+  <style>
+    body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:#111;color:#eee}
+    main{max-width:560px;margin:auto}
+    h1{margin-top:0}
+    label{display:block;margin:14px 0 6px}
+    select,textarea,input,button{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #444;background:#1b1b1b;color:#eee}
+    textarea{min-height:120px;resize:vertical}
+    .row{display:flex;gap:8px}.row>*{flex:1}
+    button{cursor:pointer}.primary{margin-top:14px}
+    #status{padding:10px;border-radius:8px;background:#1b1b1b;margin:14px 0}
+    small{opacity:.7}
+  </style>
+</head>
+<body>
+<main>
+  <h1>BRIDGE</h1>
+  <p id="status">IDLE</p>
+  <label for="brain">CEREBRO</label>
+  <select id="brain"></select>
+  <label for="worker">OBRERO</label>
+  <select id="worker"></select>
+  <label for="seed">Mensaje inicial</label>
+  <textarea id="seed" placeholder="Escribe el primer mensaje que recibirá CEREBRO..."></textarea>
+  <div class="row">
+    <div><label for="iterations">Iteraciones</label><input id="iterations" type="number" min="1" max="100" value="10"></div>
+    <div><label for="timeout">Timeout (seg.)</label><input id="timeout" type="number" min="5" max="600" value="120"></div>
+  </div>
+  <div class="row primary">
+    <button id="refresh">Actualizar pestañas</button>
+    <button id="start">INICIAR</button>
+  </div>
+  <div class="row">
+    <button id="pause">PAUSAR</button>
+    <button id="resume">CONTINUAR</button>
+    <button id="stop">DETENER</button>
+  </div>
+  <small>El ciclo alterna CEREBRO → OBRERO → CEREBRO. "TRABAJO TERMINADO" detiene el ciclo.</small>
+</main>
+<script src="control.js"></script>
+</body>
+</html>
