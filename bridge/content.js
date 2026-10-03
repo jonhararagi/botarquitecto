@@ -59,6 +59,92 @@ function getAssistantText(node) {
   return (body?.innerText || node.innerText || node.textContent || "").trim();
 }
 
+const COPY_RESPONSE_SELECTORS = [
+  'button[data-testid="copy-turn-action-button"]',
+  'button[aria-label*="Copy response" i]',
+  'button[aria-label*="Copiar respuesta" i]',
+  'button[aria-label="Copy" i]',
+  'button[aria-label="Copiar" i]',
+  'button[title*="Copy response" i]',
+  'button[title*="Copiar respuesta" i]'
+];
+
+function getCopyResponseButton(node) {
+  if (!node) return null;
+
+  const roots = [
+    node,
+    node.closest("article"),
+    node.closest('[data-testid^="conversation-turn-"]'),
+    node.parentElement
+  ].filter(Boolean);
+
+  for (const root of roots) {
+    for (const selector of COPY_RESPONSE_SELECTORS) {
+      const button = root.querySelector(selector);
+      if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") {
+        return button;
+      }
+    }
+  }
+
+  return null;
+}
+
+async function copyResponseFromChat(node, expectedText) {
+  const button = getCopyResponseButton(node);
+  if (!button) {
+    throw new Error("No está disponible la opción «Copiar respuesta» para la respuesta de origen");
+  }
+
+  const copied = await new Promise((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      document.removeEventListener("copy", onCopy, true);
+      clearTimeout(timer);
+    };
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const onCopy = (event) => {
+      const text = event.clipboardData?.getData("text/plain")?.trim() || "";
+      if (text) finish(text);
+    };
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        cleanup();
+        reject(new Error("«Copiar respuesta» no produjo datos de copia"));
+      }
+    }, 2000);
+
+    document.addEventListener("copy", onCopy, true);
+
+    try {
+      button.click();
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
+
+  const cleanCopied = stripBridgeMarker(copied);
+  const cleanExpected = stripBridgeMarker(expectedText);
+
+  if (!cleanCopied) throw new Error("«Copiar respuesta» devolvió texto vacío");
+  if (cleanCopied !== cleanExpected) {
+    throw new Error("La copia no coincide exactamente con la respuesta recién generada; se bloqueó el reenvío por seguridad");
+  }
+
+  return cleanCopied;
+}
+
 function insertText(element, text) {
   element.focus();
 
@@ -143,7 +229,7 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
       const minimumDelayReached = Date.now() - sentAt >= minTurnDelayMs;
 
       if (stable && generationStopped && minimumDelayReached) {
-        return stripBridgeMarker(current);
+        return copyResponseFromChat(latestNode, current);
       }
     }
 
