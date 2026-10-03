@@ -19,7 +19,7 @@ const STOP_SELECTORS = [
 ];
 
 const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
-
+const RESPONSE_STABLE_MS = 2000;
 let activeJobId = null;
 
 function firstVisible(selectors) {
@@ -33,9 +33,7 @@ function firstVisible(selectors) {
   return null;
 }
 
-function getInput() {
-  return firstVisible(INPUT_SELECTORS);
-}
+function getInput() { return firstVisible(INPUT_SELECTORS); }
 
 function getAssistantNodes() {
   const direct = [...document.querySelectorAll('[data-message-author-role="assistant"]')];
@@ -60,26 +58,6 @@ function getAssistantText(node) {
   const body = node.querySelector(".markdown, [data-markdown-text-style='assistant-message']");
   return (body?.innerText || node.innerText || node.textContent || "").trim();
 }
-
-function selectionBelongsToNode(selection, node) {
-  if (!selection || selection.rangeCount === 0 || !node) return false;
-  return node.contains(selection.getRangeAt(0).commonAncestorContainer);
-}
-
-function reportExplicitCopy() {
-  const selection = window.getSelection();
-  const copiedText = String(selection?.toString() || "").trim();
-  const latestNode = getLatestAssistantNode();
-  if (!copiedText || !selectionBelongsToNode(selection, latestNode)) return;
-
-  chrome.runtime.sendMessage({
-    type: "EXPLICIT_COPY",
-    text: copiedText,
-    role: "ChatGPT"
-  }).catch(() => {});
-}
-
-document.addEventListener("copy", reportExplicitCopy, true);
 
 function insertText(element, text) {
   element.focus();
@@ -134,19 +112,14 @@ function stripBridgeMarker(text) {
   return index === -1 ? value : value.slice(0, index).trim();
 }
 
-function hasBridgeMarker(text) {
-  return String(text || "").includes(BRIDGE_DONE_MARKER);
-}
-
 function isGenerationStopped() {
   return !firstVisible(STOP_SELECTORS);
 }
 
-async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
+async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
   let lastText = "";
   let stableSince = 0;
-  let sawMarker = false;
-  let sawCompletedUi = false;
+  let sawNewResponse = false;
 
   while (Date.now() - sentAt < timeoutMs) {
     const latestNode = getLatestAssistantNode();
@@ -156,18 +129,18 @@ async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, ti
     const hasNewResponse = Boolean(current && (isNewNode || isUpdatedResponse));
 
     if (hasNewResponse) {
-      if (hasBridgeMarker(current)) sawMarker = true;
-      if (isGenerationStopped()) sawCompletedUi = true;
+      sawNewResponse = true;
 
       if (current !== lastText) {
         lastText = current;
         stableSince = Date.now();
-      } else if (
-        stableSince &&
-        Date.now() - stableSince >= 30000 &&
-        Date.now() - sentAt >= minTurnDelayMs &&
-        (sawMarker || sawCompletedUi)
-      ) {
+      }
+
+      const stable = stableSince && Date.now() - stableSince >= RESPONSE_STABLE_MS;
+      const generationStopped = isGenerationStopped();
+      const minimumDelayReached = Date.now() - sentAt >= minTurnDelayMs;
+
+      if (stable && generationStopped && minimumDelayReached) {
         return stripBridgeMarker(current);
       }
     }
@@ -176,13 +149,13 @@ async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, ti
   }
 
   throw new Error(
-    sawMarker
-      ? "[[BRIDGE_DONE]] detectado, pero la respuesta no quedó estable dentro del timeout"
-      : "Timeout esperando una respuesta completa y estable"
+    sawNewResponse
+      ? "Timeout esperando que terminara la respuesta de ChatGPT"
+      : "Timeout esperando una respuesta nueva de ChatGPT"
   );
 }
 
-async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
+async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
   const input = await waitForInput(10000);
   const beforeNode = getLatestAssistantNode();
   const beforeText = getAssistantText(beforeNode);
@@ -190,41 +163,9 @@ async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
   insertText(input, text);
 
   const button = await waitForSendButton(10000);
-  if (button) {
-    button.click();
-  } else {
-    input.focus();
-    const eventInit = {
-      bubbles: true,
-      cancelable: true,
-      key: "Enter",
-      code: "Enter",
-      keyCode: 13,
-      which: 13
-    };
-    input.dispatchEvent(new KeyboardEvent("keydown", eventInit));
-    input.dispatchEvent(new KeyboardEvent("keypress", eventInit));
-    input.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+  button.click();
 
-    const confirmStarted = Date.now();
-    let started = false;
-    while (Date.now() - confirmStarted < 3000) {
-      const latest = getLatestAssistantNode();
-      const current = getAssistantText(latest);
-      const stopVisible = Boolean(firstVisible(STOP_SELECTORS));
-      if (latest !== beforeNode || current !== beforeText || stopVisible) {
-        started = true;
-        break;
-      }
-      await new Promise(r => setTimeout(r, 150));
-    }
-
-    if (!started) {
-      throw new Error("No se pudo activar el envío de ChatGPT: botón no encontrado y Enter no inició la generación");
-    }
-  }
-
-  return waitForStableCompletedResponse(
+  return waitForCompletedResponse(
     beforeNode,
     beforeText,
     Date.now(),
@@ -237,8 +178,8 @@ async function runTurn(message) {
   try {
     const text = await sendAndWait(
       message.text,
-      Number(message.timeoutMs) || 120000,
-      Number(message.minTurnDelayMs) || 10000
+      Number(message.timeoutMs) || 60000,
+      Number(message.minTurnDelayMs) || 0
     );
 
     await chrome.runtime.sendMessage({
