@@ -29,7 +29,10 @@
   <textarea id="seed" placeholder="Escribe el primer mensaje que recibirá CEREBRO..."></textarea>
   <div class="row">
     <div><label for="iterations">Iteraciones</label><input id="iterations" type="number" min="1" max="100" value="10"></div>
-    <div><label for="timeout">Timeout (seg.)</label><input id="timeout" type="number" min="5" max="600" value="120"></div>
+    <div><label for="brainTimeout">Timeout CEREBRO (seg.)</label><input id="brainTimeout" type="number" min="5" max="1800" value="120"></div>
+  </div>
+  <div class="row">
+    <div><label for="workerTimeout">Timeout OBRERO (seg.)</label><input id="workerTimeout" type="number" min="5" max="1800" value="900"></div>
   </div>
   <div class="row primary">
     <button id="refresh">Actualizar pestañas</button>
@@ -40,7 +43,7 @@
     <button id="resume">CONTINUAR</button>
     <button id="stop">DETENER</button>
   </div>
-  <small>El ciclo alterna CEREBRO → OBRERO → CEREBRO. "TRABAJO TERMINADO" detiene el ciclo.</small>
+  <small>El ciclo alterna CEREBRO → OBRERO → CEREBRO. El envío ocurre apenas se detecta que la respuesta terminó; los timeouts solo son límites de seguridad. "TRABAJO TERMINADO" detiene el ciclo.</small>
 </main>
 <script src="control.js"></script>
 </body>
