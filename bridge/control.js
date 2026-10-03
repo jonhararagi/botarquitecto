@@ -136,9 +136,9 @@ startButton.onclick = async () => {
       workerTabId: Number(worker.value),
       seed: seed.value.trim(),
       maxIterations: Number(iterations.value) || 10,
-      brainTimeoutMs: (Number(brainTimeout.value) || 120) * 1000,
-      workerTimeoutMs: (Number(workerTimeout.value) || 900) * 1000,
-      minTurnDelayMs: (Number(minTurnDelay.value) || 10) * 1000
+      brainTimeoutMs: (Number(brainTimeout.value) || 60) * 1000,
+      workerTimeoutMs: (Number(workerTimeout.value) || 600) * 1000,
+      minTurnDelayMs: (Number(minTurnDelay.value) || 0) * 1000
     });
   } catch (e) {
     setStatus("ERROR — " + e.message);
