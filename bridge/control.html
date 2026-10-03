@@ -1,19 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>BRIDGE</title>
   <style>
-    body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:#111;color:#eee}
-    main{max-width:560px;margin:auto}
-    h1{margin-top:0}
-    label{display:block;margin:14px 0 6px}
+    body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#111;color:#eee}
+    main{max-width:680px;margin:auto}
+    h1{margin:0 0 8px}
+    label{display:block;margin:12px 0 6px;font-weight:600}
     select,textarea,input,button{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #444;background:#1b1b1b;color:#eee}
-    textarea{min-height:120px;resize:vertical}
+    textarea{min-height:100px;resize:vertical}
     .row{display:flex;gap:8px}.row>*{flex:1}
-    button{cursor:pointer}.primary{margin-top:14px}
-    #status{padding:10px;border-radius:8px;background:#1b1b1b;margin:14px 0}
+    button{cursor:pointer}.primary{margin-top:12px}
+    #status{padding:10px;border-radius:8px;background:#1b1b1b;margin:12px 0}
+    #log{height:360px;overflow:auto;padding:10px;border:1px solid #333;border-radius:10px;background:#0b0b0b}
+    .msg{padding:10px;margin:8px 0;border-radius:10px;white-space:pre-wrap;word-break:break-word}
+    .brain{background:#18243a;border-left:4px solid #5b8cff}
+    .worker{background:#1d3021;border-left:4px solid #5dcc72}
+    .system{background:#242424;border-left:4px solid #888;color:#bbb}
+    .who{font-weight:700;margin-bottom:4px}
     small{opacity:.7}
   </style>
 </head>
@@ -21,19 +27,27 @@
 <main>
   <h1>BRIDGE</h1>
   <p id="status">IDLE</p>
+
   <label for="brain">CEREBRO</label>
   <select id="brain"></select>
   <label for="worker">OBRERO</label>
   <select id="worker"></select>
+
   <label for="seed">Mensaje inicial</label>
   <textarea id="seed" placeholder="Escribe el primer mensaje que recibirá CEREBRO..."></textarea>
+
+  <label>Conversación del Bridge</label>
+  <div id="log"></div>
+
   <div class="row">
     <div><label for="iterations">Iteraciones</label><input id="iterations" type="number" min="1" max="100" value="10"></div>
     <div><label for="brainTimeout">Timeout CEREBRO (seg.)</label><input id="brainTimeout" type="number" min="5" max="1800" value="120"></div>
   </div>
   <div class="row">
     <div><label for="workerTimeout">Timeout OBRERO (seg.)</label><input id="workerTimeout" type="number" min="5" max="1800" value="900"></div>
+    <div><label for="minTurnDelay">Espera mínima (seg.)</label><input id="minTurnDelay" type="number" min="0" max="60" value="10"></div>
   </div>
+
   <div class="row primary">
     <button id="refresh">Actualizar pestañas</button>
     <button id="start">INICIAR</button>
@@ -43,7 +57,7 @@
     <button id="resume">CONTINUAR</button>
     <button id="stop">DETENER</button>
   </div>
-  <small>El ciclo alterna CEREBRO → OBRERO → CEREBRO. El envío ocurre apenas se detecta que la respuesta terminó; los timeouts solo son límites de seguridad. "TRABAJO TERMINADO" detiene el ciclo.</small>
+  <small>CEREBRO → OBRERO → CEREBRO. La ventana muestra cada mensaje que BRIDGE envía y recibe. La espera mínima no retrasa una respuesta lenta: solo evita reenviar demasiado rápido una respuesta ya terminada.</small>
 </main>
 <script src="control.js"></script>
 </body>
