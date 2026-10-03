@@ -12,6 +12,8 @@ const SEND_SELECTORS = [
   "button.composer-submit-btn"
 ];
 
+let activeJobId = null;
+
 function firstVisible(selectors) {
   for (const selector of selectors) {
     const nodes = document.querySelectorAll(selector);
@@ -50,10 +52,6 @@ function getAssistantText(node) {
   if (!node) return "";
   const body = node.querySelector(".markdown, [data-markdown-text-style='assistant-message']");
   return (body?.innerText || node.innerText || node.textContent || "").trim();
-}
-
-function getLatestAssistantText() {
-  return getAssistantText(getLatestAssistantNode());
 }
 
 function insertText(element, text) {
@@ -144,19 +142,60 @@ async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
   throw new Error("Timeout waiting for complete ChatGPT response");
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === "SEND_AND_WAIT") {
-    sendAndWait(
-      String(message.text || ""),
+async function runTurn(message) {
+  try {
+    const text = await sendAndWait(
+      message.text,
       Number(message.timeoutMs) || 120000,
       Number(message.minTurnDelayMs) || 10000
-    )
-      .then(text => sendResponse({ ok: true, text }))
-      .catch(error => sendResponse({ ok: false, error: error.message || String(error) }));
-    return true;
+    );
+
+    await chrome.runtime.sendMessage({
+      type: "TURN_COMPLETE",
+      jobId: message.jobId,
+      ok: true,
+      text,
+      role: message.role || "ChatGPT"
+    });
+  } catch (error) {
+    await chrome.runtime.sendMessage({
+      type: "TURN_COMPLETE",
+      jobId: message.jobId,
+      ok: false,
+      error: error.message || String(error),
+      role: message.role || "ChatGPT"
+    });
+  } finally {
+    if (activeJobId === message.jobId) activeJobId = null;
+  }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "START_TURN") {
+    if (activeJobId && activeJobId !== message.jobId) {
+      sendResponse({ ok: false, error: "Esta pestaña ya está ejecutando otro turno" });
+      return;
+    }
+
+    activeJobId = String(message.jobId || "");
+    runTurn({
+      ...message,
+      role: message.role || "ChatGPT"
+    });
+
+    sendResponse({ ok: true, started: true });
+    return;
   }
 
   if (message?.type === "READ_LATEST") {
-    sendResponse({ ok: true, text: getLatestAssistantText() });
+    sendResponse({ ok: true, text: getAssistantText(getLatestAssistantNode()) });
+  }
+
+  if (message?.type === "BRIDGE_PING") {
+    sendResponse({ ok: true });
   }
 });
+
+chrome.runtime.sendMessage({
+  type: "BRIDGE_CONTENT_READY"
+}).catch(() => {});
