@@ -18,6 +18,7 @@ Esto permite:
 - Detectar si una de las pestañas fue cerrada.
 - Continuar CEREBRO → OBRERO → CEREBRO hasta TRABAJO TERMINADO, STOP o el límite de iteraciones.
 - Esperar a que cada respuesta termine de escribirse antes de aceptarla.
+- La espera de copia es independiente del tiempo de generación de la respuesta: análisis a los 60 s y timeout máximo de copia a los 120 s (2 minutos), tanto para CEREBRO como para OBRERO.
 - **No reenviar automáticamente una respuesta solo porque apareció o cambió en el chat.**
 - Requerir una **copia explícita del usuario** (selección + copiar/Ctrl+C) dentro de la última respuesta del asistente para pasar ese texto al siguiente chat.
 - Ignorar texto que el usuario esté escribiendo y palabras sueltas detectadas fuera de una copia explícita.
