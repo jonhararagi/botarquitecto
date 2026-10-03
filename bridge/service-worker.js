@@ -6,13 +6,6 @@ const CHATGPT_PATTERNS = [
 const STORAGE_KEY = "bridgeStateV4";
 const LEGACY_STORAGE_KEY = "bridgeStateV3";
 
-// La espera de copia es independiente del tiempo de generación.
-// Primer mini-análisis a los 30 s y timeout máximo de copia a los 120 s.
-const COPY_CHECKPOINTS_MS = {
-  CEREBRO: [30000, 120000],
-  OBRERO: [30000, 120000]
-};
-
 const DEFAULT_STATE = {
   brainTabId: null,
   workerTabId: null,
@@ -28,10 +21,6 @@ const DEFAULT_STATE = {
   lastForwarded: "",
   activeRole: null,
   activeJobId: null,
-  awaitingCopyRole: null,
-  awaitingCopyText: "",
-  awaitingCopySince: 0,
-  awaitingCopyCheckpoint: 0,
   log: []
 };
 
@@ -101,77 +90,6 @@ async function ensureTabAlive(tabId, role) {
   if (!isChatGPTTab(tab)) throw new Error(role + " ya no es una pestaña ChatGPT");
 }
 
-function copyAlarmName(role) {
-  return "bridge-copy-" + role;
-}
-
-async function clearCopyAlarm(role) {
-  if (!role) return;
-  await chrome.alarms.clear(copyAlarmName(role));
-}
-
-function getCopyCheckpoints(role) {
-  return COPY_CHECKPOINTS_MS[role] || [];
-}
-
-async function scheduleNextCopyCheckpoint() {
-  if (!state.running || !state.awaitingCopyRole || !state.awaitingCopySince) return;
-  const role = state.awaitingCopyRole;
-  const checkpoints = getCopyCheckpoints(role);
-  const index = Number(state.awaitingCopyCheckpoint) || 0;
-  if (index >= checkpoints.length) return;
-  const elapsed = Date.now() - state.awaitingCopySince;
-  const remaining = Math.max(1000, checkpoints[index] - elapsed);
-  await chrome.alarms.clear(copyAlarmName(role));
-  await chrome.alarms.create(copyAlarmName(role), { when: Date.now() + remaining });
-}
-
-async function inspectCopyWait(role) {
-  await hydrate();
-  if (!state.running || state.awaitingCopyRole !== role || !state.awaitingCopySince) return;
-
-  const checkpoints = getCopyCheckpoints(role);
-  const elapsed = Date.now() - state.awaitingCopySince;
-  let index = Number(state.awaitingCopyCheckpoint) || 0;
-
-  try {
-    await ensureTabAlive(role === "CEREBRO" ? state.brainTabId : state.workerTabId, role);
-  } catch (error) {
-    await failRun(error.message || String(error));
-    return;
-  }
-
-  while (index < checkpoints.length && elapsed >= checkpoints[index]) {
-    const seconds = Math.floor(elapsed / 1000);
-    const checkpointSeconds = Math.floor(checkpoints[index] / 1000);
-    const finalCheckpoint = index === checkpoints.length - 1;
-    await addLog("ANÁLISIS", role + " sigue activo; esperando copia. " + seconds + " s / " + checkpointSeconds + " s.");
-
-    if (finalCheckpoint) {
-      await failRun("Timeout esperando copia de " + role + " (" + seconds + " s)");
-      return;
-    }
-    index += 1;
-  }
-
-  state.awaitingCopyCheckpoint = index;
-  const nextLimit = checkpoints[index];
-  const seconds = Math.floor(elapsed / 1000);
-  const remaining = Math.max(0, Math.ceil((nextLimit - elapsed) / 1000));
-  state.status = "WAITING_COPY — " + role + " | " + seconds + " s | próximo análisis en " + remaining + " s";
-  await saveState();
-  await scheduleNextCopyCheckpoint();
-}
-
-chrome.alarms.onAlarm.addListener(async alarm => {
-  await hydrate();
-  if (alarm.name === copyAlarmName("CEREBRO")) {
-    await inspectCopyWait("CEREBRO");
-  } else if (alarm.name === copyAlarmName("OBRERO")) {
-    await inspectCopyWait("OBRERO");
-  }
-});
-
 async function dispatchTurn(role, text) {
   if (!state.running || state.stopRequested || state.paused) return;
 
@@ -211,12 +129,6 @@ async function failRun(message) {
   state.running = false;
   state.activeRole = null;
   state.activeJobId = null;
-  state.awaitingCopyRole = null;
-  state.awaitingCopyText = "";
-  state.awaitingCopySince = 0;
-  state.awaitingCopyCheckpoint = 0;
-  await clearCopyAlarm("CEREBRO");
-  await clearCopyAlarm("OBRERO");
   state.status = "ERROR — " + message;
   await addLog("BRIDGE", "ERROR — " + message);
   await saveState();
@@ -261,13 +173,6 @@ async function finishTurn(jobId, ok, role, text, error) {
 
   state.lastForwarded = result;
   state.iteration += 1;
-  state.awaitingCopyRole = null;
-  state.awaitingCopyText = "";
-  state.awaitingCopySince = 0;
-  state.awaitingCopyCheckpoint = 0;
-
-  await clearCopyAlarm("CEREBRO");
-  await clearCopyAlarm("OBRERO");
 
   if (state.iteration >= state.maxIterations) {
     state.running = false;
@@ -293,67 +198,6 @@ async function finishTurn(jobId, ok, role, text, error) {
   }
 }
 
-async function handleExplicitCopy(senderTabId, copiedText) {
-  await hydrate();
-
-  if (!state.running || !state.awaitingCopyRole || !state.awaitingCopyText) {
-    return { ok: false, ignored: true, reason: "No hay una respuesta esperando copia" };
-  }
-
-  const expectedTabId = state.awaitingCopyRole === "CEREBRO"
-    ? state.brainTabId
-    : state.workerTabId;
-
-  if (senderTabId !== expectedTabId) {
-    return { ok: false, ignored: true, reason: "La copia no proviene de la pestaña que está esperando BRIDGE" };
-  }
-
-  const copied = String(copiedText || "").trim();
-  if (!copied) {
-    return { ok: false, ignored: true, reason: "Copia vacía" };
-  }
-
-  if (!state.awaitingCopyText.includes(copied)) {
-    return { ok: false, ignored: true, reason: "El texto copiado no pertenece a la respuesta del asistente" };
-  }
-
-  const role = state.awaitingCopyRole;
-  await clearCopyAlarm(role);
-  const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
-
-  state.lastForwarded = copied;
-  state.iteration += 1;
-  state.awaitingCopyRole = null;
-  state.awaitingCopyText = "";
-  state.awaitingCopySince = 0;
-  state.awaitingCopyCheckpoint = 0;
-
-  await addLog("COPIA", copied);
-
-  if (state.iteration >= state.maxIterations) {
-    state.running = false;
-    state.status = "LIMIT_REACHED — " + state.iteration + " iteraciones";
-    await saveState();
-    return { ok: true, forwarded: false, finished: true };
-  }
-
-  if (state.paused) {
-    state.status = "PAUSED — siguiente: " + nextRole;
-    await saveState();
-    return { ok: true, forwarded: false, paused: true };
-  }
-
-  await saveState();
-
-  try {
-    await dispatchTurn(nextRole, copied);
-    return { ok: true, forwarded: true, nextRole };
-  } catch (error) {
-    await failRun(error.message || String(error));
-    return { ok: false, error: error.message || String(error) };
-  }
-}
-
 chrome.runtime.onInstalled.addListener(async () => {
   await hydrate();
   if (!state.running) {
@@ -364,7 +208,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(async () => {
   await hydrate();
-  if (state.running && state.awaitingCopyRole) await inspectCopyWait(state.awaitingCopyRole);
+  // El estado persistido se conserva al reiniciar el navegador.
 });
 
 chrome.runtime.onSuspend.addListener(() => {
@@ -373,22 +217,17 @@ chrome.runtime.onSuspend.addListener(() => {
 
 chrome.action.onClicked.addListener(async () => {
   await hydrate();
-  const windows = await chrome.windows.getAll({ populate: true });
-  const existing = windows.flatMap(w => w.tabs || []).find(tab =>
-    typeof tab.url === "string" && tab.url.startsWith(chrome.runtime.getURL("control.html"))
-  );
+  const controlUrl = chrome.runtime.getURL("control.html");
+  const tabs = await chrome.tabs.query({});
+  const existing = tabs.find(tab => tab.url === controlUrl);
 
-  if (existing) {
-    await chrome.windows.update(existing.windowId, { focused: true, state: "normal" });
+  if (existing?.id) {
+    await chrome.tabs.update(existing.id, { active: true });
+    await chrome.windows.update(existing.windowId, { focused: true });
     return;
   }
 
-  await chrome.windows.create({
-    url: chrome.runtime.getURL("control.html"),
-    type: "popup",
-    width: 620,
-    height: 760
-  });
+  await chrome.tabs.create({ url: controlUrl, active: true });
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -438,8 +277,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.lastForwarded = "";
       state.activeRole = null;
       state.activeJobId = null;
-      state.awaitingCopyRole = null;
-      state.awaitingCopyText = "";
       state.log = [];
       state.status = "STARTING";
       await saveState();
@@ -465,10 +302,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message?.type === "RESUME") {
       state.paused = false;
-      if (state.running && state.awaitingCopyRole) {
-        state.status = "WAITING_COPY — esperando copia de " + state.awaitingCopyRole;
-        await saveState();
-      } else if (state.running && !state.activeJobId) {
+      if (state.running && !state.activeJobId) {
         const last = state.log.filter(x => x.role === "CEREBRO" || x.role === "OBRERO").at(-1);
         if (!last) throw new Error("No hay un turno pendiente para continuar");
         const nextRole = last.role === "CEREBRO" ? "OBRERO" : "CEREBRO";
@@ -491,8 +325,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.awaitingCopyText = "";
       state.awaitingCopySince = 0;
       state.awaitingCopyCheckpoint = 0;
-      await clearCopyAlarm("CEREBRO");
-      await clearCopyAlarm("OBRERO");
       state.status = "STOPPED";
       await saveState();
       sendResponse({ ok: true, state: snapshot() });
@@ -501,8 +333,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message?.type === "RESET_STATE") {
       if (state.running) throw new Error("Detén BRIDGE antes de limpiar el historial");
-      await clearCopyAlarm("CEREBRO");
-      await clearCopyAlarm("OBRERO");
       state = { ...DEFAULT_STATE };
       await saveState();
       sendResponse({ ok: true, state: snapshot() });
@@ -511,15 +341,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message?.type === "GET_STATE") {
       sendResponse({ ok: true, state: snapshot() });
-      return;
-    }
-
-    if (message?.type === "EXPLICIT_COPY") {
-      const result = await handleExplicitCopy(
-        sender.tab?.id ?? null,
-        message.text
-      );
-      sendResponse(result);
       return;
     }
 
