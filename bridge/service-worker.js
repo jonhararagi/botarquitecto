@@ -6,11 +6,11 @@ const CHATGPT_PATTERNS = [
 const STORAGE_KEY = "bridgeStateV4";
 const LEGACY_STORAGE_KEY = "bridgeStateV3";
 
-// La espera de copia es independiente del tiempo de generación del mensaje.
-// Se hace un mini-análisis a los 60 s y se corta como máximo a los 120 s.
+// La espera de copia es independiente del tiempo de generación.
+// Primer mini-análisis a los 30 s y timeout máximo de copia a los 120 s.
 const COPY_CHECKPOINTS_MS = {
-  CEREBRO: [60000, 120000],
-  OBRERO: [60000, 120000]
+  CEREBRO: [30000, 120000],
+  OBRERO: [30000, 120000]
 };
 
 const DEFAULT_STATE = {
@@ -257,14 +257,12 @@ async function finishTurn(jobId, ok, role, text, error) {
     return;
   }
 
-  // Important: a completed response is NOT forwarded automatically.
-  // BRIDGE waits for the user to explicitly copy text from this assistant response.
   state.awaitingCopyRole = role;
   state.awaitingCopyText = result;
   state.awaitingCopySince = Date.now();
   state.awaitingCopyCheckpoint = 0;
   state.status = "WAITING_COPY — copia el texto de " + role + " para continuar";
-  await addLog("BRIDGE", "Respuesta terminada. Esperando copia explícita de " + role + ".");
+  await addLog("BRIDGE", "Respuesta terminada y estable. Esperando copia explícita de " + role + ".");
   await saveState();
   await scheduleNextCopyCheckpoint();
 }
@@ -289,8 +287,6 @@ async function handleExplicitCopy(senderTabId, copiedText) {
     return { ok: false, ignored: true, reason: "Copia vacía" };
   }
 
-  // The copied text must actually exist in the completed assistant response.
-  // This prevents copying a word typed by the user from becoming a command.
   if (!state.awaitingCopyText.includes(copied)) {
     return { ok: false, ignored: true, reason: "El texto copiado no pertenece a la respuesta del asistente" };
   }
