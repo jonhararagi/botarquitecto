@@ -3,553 +3,196 @@ const CHATGPT_PATTERNS = [
   /^https:\/\/chat\.openai\.com\//
 ];
 
-const STORAGE_KEY = "bridgeStateV4";
-const LEGACY_STORAGE_KEY = "bridgeStateV3";
+const STORAGE_KEY = "bridgeStateV5";
+const DEFAULT_SETTINGS = { brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0, maxIterations: 10 };
 
-// Los checkpoints quedan como compatibilidad con el estado anterior; el flujo normal ya autoenvía al detectar la respuesta completa.
-const COPY_CHECKPOINTS_MS = {
-  CEREBRO: [15000, 60000],
-  OBRERO: [30000, 600000]
-};
+function makeId() { return "session-" + crypto.randomUUID(); }
+function createSession(name = "Sesión 1") {
+  return { id: makeId(), name, brainTabId: null, workerTabId: null, status: "IDLE", paused: false, stopRequested: false, running: false, iteration: 0, maxIterations: DEFAULT_SETTINGS.maxIterations, brainTimeoutMs: DEFAULT_SETTINGS.brainTimeoutMs, workerTimeoutMs: DEFAULT_SETTINGS.workerTimeoutMs, minTurnDelayMs: DEFAULT_SETTINGS.minTurnDelayMs, lastForwarded: "", activeRole: null, activeJobId: null, log: [] };
+}
 
-const DEFAULT_STATE = {
-  brainTabId: null,
-  workerTabId: null,
-  status: "IDLE",
-  paused: false,
-  stopRequested: false,
-  iteration: 0,
-  maxIterations: 10,
-  brainTimeoutMs: 60000,
-  workerTimeoutMs: 600000,
-  minTurnDelayMs: 0,
-  running: false,
-  lastForwarded: "",
-  activeRole: null,
-  activeJobId: null,
-  awaitingCopyRole: null,
-  awaitingCopyText: "",
-  awaitingCopySince: 0,
-  awaitingCopyCheckpoint: 0,
-  log: []
-};
-
-let state = { ...DEFAULT_STATE };
+const DEFAULT_STATE = { version: 5, activeSessionId: null, sessions: [] };
+let state = structuredClone(DEFAULT_STATE);
 let hydrated = false;
 
 async function hydrate() {
   if (hydrated) return;
-  const saved = await chrome.storage.local.get([STORAGE_KEY, LEGACY_STORAGE_KEY]);
-  const stored = saved?.[STORAGE_KEY] || saved?.[LEGACY_STORAGE_KEY];
-  if (stored) {
-    state = { ...DEFAULT_STATE, ...stored };
-    if (!Array.isArray(state.log)) state.log = [];
+  const saved = await chrome.storage.local.get(STORAGE_KEY);
+  if (saved?.[STORAGE_KEY]?.sessions) state = saved[STORAGE_KEY];
+  if (!Array.isArray(state.sessions)) state.sessions = [];
+  if (!state.sessions.length) {
+    const s = createSession();
+    state.sessions.push(s);
+    state.activeSessionId = s.id;
   }
+  if (!state.activeSessionId || !state.sessions.some(s => s.id === state.activeSessionId)) state.activeSessionId = state.sessions[0].id;
   hydrated = true;
+  await saveState();
 }
-
-async function saveState() {
-  await chrome.storage.local.set({ [STORAGE_KEY]: state });
+async function saveState() { await chrome.storage.local.set({ [STORAGE_KEY]: state }); }
+function getSession(id) { return state.sessions.find(s => s.id === id) || null; }
+function snapshot() { return { version: state.version, activeSessionId: state.activeSessionId, sessions: state.sessions.map(s => ({ ...s, log: [...s.log] })) }; }
+async function addLog(s, role, text) {
+  s.log.push({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 8), role, text: String(text || ""), time: Date.now() });
+  if (s.log.length > 120) s.log.splice(0, s.log.length - 120);
+  await saveState();
 }
-
-function isChatGPTTab(tab) {
-  return typeof tab?.url === "string" &&
-    CHATGPT_PATTERNS.some(pattern => pattern.test(tab.url));
-}
-
+function isChatGPTTab(tab) { return typeof tab?.url === "string" && CHATGPT_PATTERNS.some(p => p.test(tab.url)); }
 async function getChatGPTTabs() {
-  const tabs = await chrome.tabs.query({});
-  return tabs
-    .filter(isChatGPTTab)
-    .map(tab => ({
-      id: tab.id,
-      windowId: tab.windowId,
-      title: tab.title || "ChatGPT",
-      url: tab.url
-    }));
+  return (await chrome.tabs.query({})).filter(isChatGPTTab).map(tab => ({ id: tab.id, windowId: tab.windowId, title: tab.title || "ChatGPT", url: tab.url }));
 }
-
-function snapshot() {
-  return { ...state, log: [...state.log] };
-}
-
-async function setState(patch) {
-  Object.assign(state, patch);
-  await saveState();
-}
-
-async function addLog(role, text) {
-  state.log.push({
-    id: Date.now() + "-" + Math.random().toString(36).slice(2, 8),
-    role,
-    text: String(text || ""),
-    time: Date.now()
-  });
-  if (state.log.length > 120) state.log.splice(0, state.log.length - 120);
-  await saveState();
-}
-
 async function ensureTabAlive(tabId, role) {
   if (!tabId) throw new Error(role + " no tiene pestaña configurada");
   let tab;
-  try {
-    tab = await chrome.tabs.get(tabId);
-  } catch {
-    throw new Error(role + " fue cerrada");
-  }
+  try { tab = await chrome.tabs.get(tabId); } catch { throw new Error(role + " fue cerrada"); }
   if (!isChatGPTTab(tab)) throw new Error(role + " ya no es una pestaña ChatGPT");
 }
 
-function copyAlarmName(role) {
-  return "bridge-copy-" + role;
-}
-
-async function clearCopyAlarm(role) {
-  if (!role) return;
-  await chrome.alarms.clear(copyAlarmName(role));
-}
-
-function getCopyCheckpoints(role) {
-  return COPY_CHECKPOINTS_MS[role] || [];
-}
-
-async function scheduleNextCopyCheckpoint() {
-  if (!state.running || !state.awaitingCopyRole || !state.awaitingCopySince) return;
-  const role = state.awaitingCopyRole;
-  const checkpoints = getCopyCheckpoints(role);
-  const index = Number(state.awaitingCopyCheckpoint) || 0;
-  if (index >= checkpoints.length) return;
-  const elapsed = Date.now() - state.awaitingCopySince;
-  const remaining = Math.max(1000, checkpoints[index] - elapsed);
-  await chrome.alarms.clear(copyAlarmName(role));
-  await chrome.alarms.create(copyAlarmName(role), { when: Date.now() + remaining });
-}
-
-async function inspectCopyWait(role) {
-  await hydrate();
-  if (!state.running || state.awaitingCopyRole !== role || !state.awaitingCopySince) return;
-
-  const checkpoints = getCopyCheckpoints(role);
-  const elapsed = Date.now() - state.awaitingCopySince;
-  let index = Number(state.awaitingCopyCheckpoint) || 0;
-
-  try {
-    await ensureTabAlive(role === "CEREBRO" ? state.brainTabId : state.workerTabId, role);
-  } catch (error) {
-    await failRun(error.message || String(error));
-    return;
-  }
-
-  while (index < checkpoints.length && elapsed >= checkpoints[index]) {
-    const seconds = Math.floor(elapsed / 1000);
-    const checkpointSeconds = Math.floor(checkpoints[index] / 1000);
-    const finalCheckpoint = index === checkpoints.length - 1;
-    await addLog("ANÁLISIS", role + " sigue activo; esperando copia. " + seconds + " s / " + checkpointSeconds + " s.");
-
-    if (finalCheckpoint) {
-      await failRun("Timeout esperando copia de " + role + " (" + seconds + " s)");
-      return;
-    }
-    index += 1;
-  }
-
-  state.awaitingCopyCheckpoint = index;
-  const nextLimit = checkpoints[index];
-  const seconds = Math.floor(elapsed / 1000);
-  const remaining = Math.max(0, Math.ceil((nextLimit - elapsed) / 1000));
-  state.status = "WAITING_COPY — " + role + " | " + seconds + " s | próximo análisis en " + remaining + " s";
-  await saveState();
-  await scheduleNextCopyCheckpoint();
-}
-
-chrome.alarms.onAlarm.addListener(async alarm => {
-  await hydrate();
-  if (alarm.name === copyAlarmName("CEREBRO")) {
-    await inspectCopyWait("CEREBRO");
-  } else if (alarm.name === copyAlarmName("OBRERO")) {
-    await inspectCopyWait("OBRERO");
-  }
-});
-
-async function dispatchTurn(role, text) {
-  if (!state.running || state.stopRequested || state.paused) return;
-
-  const tabId = role === "CEREBRO" ? state.brainTabId : state.workerTabId;
-  const timeoutMs = role === "CEREBRO" ? state.brainTimeoutMs : state.workerTimeoutMs;
+async function dispatchTurn(s, role, text) {
+  if (!s.running || s.stopRequested || s.paused) return;
+  const tabId = role === "CEREBRO" ? s.brainTabId : s.workerTabId;
+  const timeoutMs = role === "CEREBRO" ? s.brainTimeoutMs : s.workerTimeoutMs;
   const jobId = crypto.randomUUID();
-
   await ensureTabAlive(tabId, role);
-
-  state.activeRole = role;
-  state.activeJobId = jobId;
-  state.status = "RUNNING — esperando a " + role;
-  await saveState();
-  await addLog("BRIDGE", "Enviando a " + role + "...");
-
-  let response;
+  s.activeRole = role; s.activeJobId = jobId; s.status = "RUNNING — " + s.name + " — " + role;
+  await saveState(); await addLog(s, "BRIDGE", "Enviando a " + role + "...");
   try {
-    response = await chrome.tabs.sendMessage(tabId, {
-      type: "START_TURN",
-      jobId,
-      text,
-      timeoutMs,
-      minTurnDelayMs: state.minTurnDelayMs,
-      role
-    });
+    const response = await chrome.tabs.sendMessage(tabId, { type: "START_TURN", jobId, text, timeoutMs, minTurnDelayMs: s.minTurnDelayMs, role, sessionId: s.id });
+    if (!response?.ok) throw new Error(response?.error || role + " no pudo iniciar el turno");
   } catch (error) {
-    throw new Error(
-      role + " no responde. Recarga esa pestaña ChatGPT para cargar BRIDGE. " +
-      (error?.message || "")
-    );
+    throw new Error(role + " no responde. Recarga esa pestaña ChatGPT para cargar BRIDGE. " + (error?.message || ""));
   }
-
-  if (!response?.ok) throw new Error(response?.error || role + " no pudo iniciar el turno");
 }
 
-async function failRun(message) {
-  state.running = false;
-  state.activeRole = null;
-  state.activeJobId = null;
-  state.awaitingCopyRole = null;
-  state.awaitingCopyText = "";
-  state.awaitingCopySince = 0;
-  state.awaitingCopyCheckpoint = 0;
-  await clearCopyAlarm("CEREBRO");
-  await clearCopyAlarm("OBRERO");
-  state.status = "ERROR — " + message;
-  await addLog("BRIDGE", "ERROR — " + message);
-  await saveState();
+async function failSession(s, message) {
+  s.running = false; s.activeRole = null; s.activeJobId = null; s.status = "ERROR — " + message;
+  await addLog(s, "BRIDGE", "ERROR — " + message); await saveState();
 }
 
-async function finishTurn(jobId, ok, role, text, error) {
-  await hydrate();
-
-  if (!state.running || state.stopRequested || jobId !== state.activeJobId) {
-    return;
-  }
-
-  state.activeJobId = null;
-  state.activeRole = null;
-
-  if (!ok) {
-    await failRun(role + " — " + (error || "error desconocido"));
-    return;
-  }
-
+async function finishTurn(s, jobId, ok, role, text, error) {
+  if (!s.running || s.stopRequested || jobId !== s.activeJobId) return;
+  s.activeJobId = null; s.activeRole = null;
+  if (!ok) return failSession(s, role + " — " + (error || "error desconocido"));
   const result = String(text || "").trim();
-  if (!result) {
-    await failRun(role + " devolvió una respuesta vacía");
-    return;
-  }
-
-  await addLog(role, result);
-
-  if (result === "TRABAJO TERMINADO") {
-    state.running = false;
-    state.status = "FINISHED — TRABAJO TERMINADO";
-    await saveState();
-    return;
-  }
-
-  if (result === state.lastForwarded) {
-    await failRun("Respuesta duplicada detectada");
-    return;
-  }
+  if (!result) return failSession(s, role + " devolvió una respuesta vacía");
+  await addLog(s, role, result);
+  if (result === "TRABAJO TERMINADO") { s.running = false; s.status = "FINISHED — TRABAJO TERMINADO"; return saveState(); }
+  if (result === s.lastForwarded) return failSession(s, "Respuesta duplicada detectada");
 
   const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
+  s.lastForwarded = result; s.iteration++;
+  if (s.iteration >= s.maxIterations) { s.running = false; s.status = "LIMIT_REACHED — " + s.iteration + " iteraciones"; return saveState(); }
+  if (s.paused) { s.status = "PAUSED — siguiente: " + nextRole; return saveState(); }
 
-  state.lastForwarded = result;
-  state.iteration += 1;
-  state.awaitingCopyRole = null;
-  state.awaitingCopyText = "";
-  state.awaitingCopySince = 0;
-  state.awaitingCopyCheckpoint = 0;
-
-  await clearCopyAlarm("CEREBRO");
-  await clearCopyAlarm("OBRERO");
-
-  if (state.iteration >= state.maxIterations) {
-    state.running = false;
-    state.status = "LIMIT_REACHED — " + state.iteration + " iteraciones";
-    await saveState();
-    return;
-  }
-
-  if (state.paused) {
-    state.status = "PAUSED — siguiente: " + nextRole;
-    await saveState();
-    return;
-  }
-
-  state.status = "AUTO_FORWARD — " + role + " → " + nextRole;
-  await addLog("BRIDGE", "Respuesta verificada. Enviando automáticamente a " + nextRole + ".");
+  s.status = "AUTO_FORWARD — " + role + " → " + nextRole;
+  await addLog(s, "BRIDGE", "Respuesta verificada. Enviando automáticamente a " + nextRole + ".");
   await saveState();
-
-  try {
-    await dispatchTurn(nextRole, result);
-  } catch (error) {
-    await failRun(error.message || String(error));
-  }
+  try { await dispatchTurn(s, nextRole, result); } catch (e) { await failSession(s, e.message || String(e)); }
 }
 
-async function handleExplicitCopy(senderTabId, copiedText) {
-  await hydrate();
+async function createSession(name) {
+  const s = createSessionObject(name);
+  state.sessions.push(s); state.activeSessionId = s.id; await saveState(); return s;
+}
+function createSessionObject(name) { return createSessionModel(name || "Sesión " + (state.sessions.length + 1)); }
+function createSessionModel(name) { return { ...createSession(name), _unused: undefined }; }
 
-  if (!state.running || !state.awaitingCopyRole || !state.awaitingCopyText) {
-    return { ok: false, ignored: true, reason: "No hay una respuesta esperando copia" };
-  }
-
-  const expectedTabId = state.awaitingCopyRole === "CEREBRO"
-    ? state.brainTabId
-    : state.workerTabId;
-
-  if (senderTabId !== expectedTabId) {
-    return { ok: false, ignored: true, reason: "La copia no proviene de la pestaña que está esperando BRIDGE" };
-  }
-
-  const copied = String(copiedText || "").trim();
-  if (!copied) {
-    return { ok: false, ignored: true, reason: "Copia vacía" };
-  }
-
-  if (!state.awaitingCopyText.includes(copied)) {
-    return { ok: false, ignored: true, reason: "El texto copiado no pertenece a la respuesta del asistente" };
-  }
-
-  const role = state.awaitingCopyRole;
-  await clearCopyAlarm(role);
-  const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
-
-  state.lastForwarded = copied;
-  state.iteration += 1;
-  state.awaitingCopyRole = null;
-  state.awaitingCopyText = "";
-  state.awaitingCopySince = 0;
-  state.awaitingCopyCheckpoint = 0;
-
-  await addLog("COPIA", copied);
-
-  if (state.iteration >= state.maxIterations) {
-    state.running = false;
-    state.status = "LIMIT_REACHED — " + state.iteration + " iteraciones";
-    await saveState();
-    return { ok: true, forwarded: false, finished: true };
-  }
-
-  if (state.paused) {
-    state.status = "PAUSED — siguiente: " + nextRole;
-    await saveState();
-    return { ok: true, forwarded: false, paused: true };
-  }
-
+async function removeSession(id) {
+  const s = getSession(id);
+  if (!s) throw new Error("Sesión no encontrada");
+  if (s.running) throw new Error("Detén la sesión antes de eliminarla");
+  if (state.sessions.length === 1) throw new Error("Debe existir al menos una sesión");
+  state.sessions = state.sessions.filter(x => x.id !== id);
+  if (state.activeSessionId === id) state.activeSessionId = state.sessions[0].id;
   await saveState();
-
-  try {
-    await dispatchTurn(nextRole, copied);
-    return { ok: true, forwarded: true, nextRole };
-  } catch (error) {
-    await failRun(error.message || String(error));
-    return { ok: false, error: error.message || String(error) };
-  }
 }
 
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.tabs.onRemoved.addListener(async tabId => {
   await hydrate();
-  if (!state.running) {
-    state = { ...DEFAULT_STATE, log: state.log };
-    await saveState();
+  for (const s of state.sessions) if (s.running && (tabId === s.brainTabId || tabId === s.workerTabId)) {
+    await failSession(s, (tabId === s.brainTabId ? "CEREBRO" : "OBRERO") + " fue cerrada");
   }
-});
-
-chrome.runtime.onStartup.addListener(async () => {
-  await hydrate();
-  if (state.running && state.awaitingCopyRole) await inspectCopyWait(state.awaitingCopyRole);
-});
-
-chrome.runtime.onSuspend.addListener(() => {
-  // State is persisted; alarms restore copy-wait checkpoints after the worker sleeps.
 });
 
 chrome.action.onClicked.addListener(async () => {
   await hydrate();
   const windows = await chrome.windows.getAll({ populate: true });
-  const existing = windows.flatMap(w => w.tabs || []).find(tab =>
-    typeof tab.url === "string" && tab.url.startsWith(chrome.runtime.getURL("control.html"))
-  );
-
-  if (existing) {
-    await chrome.windows.update(existing.windowId, { focused: true, state: "normal" });
-    return;
-  }
-
-  await chrome.windows.create({
-    url: chrome.runtime.getURL("control.html"),
-    type: "popup",
-    width: 620,
-    height: 760
-  });
-});
-
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  await hydrate();
-  if (!state.running) return;
-
-  if (tabId === state.brainTabId || tabId === state.workerTabId) {
-    const role = tabId === state.brainTabId ? "CEREBRO" : "OBRERO";
-    await failRun(role + " fue cerrada");
-  }
+  const existing = windows.flatMap(w => w.tabs || []).find(t => typeof t.url === "string" && t.url.startsWith(chrome.runtime.getURL("control.html")));
+  if (existing) { await chrome.windows.update(existing.windowId, { focused: true, state: "normal" }); return; }
+  await chrome.windows.create({ url: chrome.runtime.getURL("control.html"), type: "popup", width: 760, height: 820 });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     await hydrate();
+    if (message?.type === "LIST_CHATGPT_TABS") { sendResponse({ ok: true, tabs: await getChatGPTTabs(), state: snapshot() }); return; }
 
-    if (message?.type === "LIST_CHATGPT_TABS") {
-      sendResponse({ ok: true, tabs: await getChatGPTTabs(), state: snapshot() });
-      return;
+    if (message?.type === "CREATE_SESSION") {
+      const s = createSessionModel(String(message.name || "").trim() || "Sesión " + (state.sessions.length + 1));
+      state.sessions.push(s); state.activeSessionId = s.id; await saveState();
+      sendResponse({ ok: true, state: snapshot() }); return;
     }
-
-    if (message?.type === "SET_ROLES") {
-      if (state.running) throw new Error("No cambies las pestañas mientras BRIDGE está activo");
-      state.brainTabId = Number(message.brainTabId) || null;
-      state.workerTabId = Number(message.workerTabId) || null;
-      await saveState();
-      sendResponse({ ok: true, state: snapshot() });
-      return;
+    if (message?.type === "DELETE_SESSION") { await removeSession(String(message.sessionId || "")); sendResponse({ ok: true, state: snapshot() }); return; }
+    if (message?.type === "SELECT_SESSION") {
+      const s = getSession(String(message.sessionId || "")); if (!s) throw new Error("Sesión no encontrada");
+      state.activeSessionId = s.id; await saveState(); sendResponse({ ok: true, state: snapshot() }); return;
     }
-
+    if (message?.type === "SAVE_SESSION") {
+      const s = getSession(String(message.sessionId || "")); if (!s) throw new Error("Sesión no encontrada");
+      if (s.running) throw new Error("No cambies una sesión mientras está activa");
+      s.name = String(message.name || s.name).trim() || s.name;
+      s.brainTabId = Number(message.brainTabId) || null; s.workerTabId = Number(message.workerTabId) || null;
+      s.maxIterations = Math.max(1, Math.min(100, Number(message.maxIterations) || 10));
+      s.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
+      s.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
+      s.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
+      await saveState(); sendResponse({ ok: true, state: snapshot() }); return;
+    }
     if (message?.type === "START_LOOP") {
-      if (state.running) throw new Error("BRIDGE ya está activo");
-
-      const seed = String(message.seed || "").trim();
-      if (!seed) throw new Error("Escribe el mensaje inicial");
-
-      state.brainTabId = Number(message.brainTabId) || state.brainTabId;
-      state.workerTabId = Number(message.workerTabId) || state.workerTabId;
-      state.maxIterations = Math.max(1, Math.min(100, Number(message.maxIterations) || 10));
-      state.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
-      state.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
-      state.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
-      state.running = true;
-      state.paused = false;
-      state.stopRequested = false;
-      state.iteration = 0;
-      state.lastForwarded = "";
-      state.activeRole = null;
-      state.activeJobId = null;
-      state.awaitingCopyRole = null;
-      state.awaitingCopyText = "";
-      state.log = [];
-      state.status = "STARTING";
-      await saveState();
-      await addLog("USUARIO", seed);
-
-      try {
-        await dispatchTurn("CEREBRO", seed);
-      } catch (error) {
-        await failRun(error.message || String(error));
+      const s = getSession(String(message.sessionId || "")); if (!s) throw new Error("Sesión no encontrada");
+      if (s.running) throw new Error("Esta sesión ya está activa");
+      const seed = String(message.seed || "").trim(); if (!seed) throw new Error("Escribe el mensaje inicial");
+      s.brainTabId = Number(message.brainTabId) || s.brainTabId; s.workerTabId = Number(message.workerTabId) || s.workerTabId;
+      s.maxIterations = Math.max(1, Math.min(100, Number(message.maxIterations) || 10));
+      s.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
+      s.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
+      s.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
+      s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.activeRole = null; s.activeJobId = null; s.log = []; s.status = "STARTING";
+      state.activeSessionId = s.id; await saveState(); await addLog(s, "USUARIO", seed);
+      try { await dispatchTurn(s, "CEREBRO", seed); } catch (e) { await failSession(s, e.message || String(e)); }
+      sendResponse({ ok: true, state: snapshot() }); return;
+    }
+    if (["PAUSE","RESUME","STOP"].includes(message?.type)) {
+      const s = getSession(String(message.sessionId || state.activeSessionId)); if (!s) throw new Error("Sesión no encontrada");
+      if (message.type === "PAUSE") { s.paused = true; if (s.running) s.status = "PAUSED — esperando terminar el turno actual"; }
+      if (message.type === "RESUME") {
+        s.paused = false;
+        if (s.running && !s.activeJobId) {
+          const last = s.log.filter(x => x.role === "CEREBRO" || x.role === "OBRERO").at(-1);
+          if (!last) throw new Error("No hay un turno pendiente para continuar");
+          await dispatchTurn(s, last.role === "CEREBRO" ? "OBRERO" : "CEREBRO", last.text);
+        } else if (s.running) s.status = "RUNNING — esperando a " + s.activeRole;
       }
-
-      sendResponse({ ok: true, state: snapshot() });
-      return;
+      if (message.type === "STOP") { s.stopRequested = true; s.running = false; s.paused = false; s.activeJobId = null; s.activeRole = null; s.status = "STOPPED"; }
+      await saveState(); sendResponse({ ok: true, state: snapshot() }); return;
     }
-
-    if (message?.type === "PAUSE") {
-      state.paused = true;
-      if (state.running) state.status = "PAUSED — esperando terminar el turno actual";
-      await saveState();
-      sendResponse({ ok: true, state: snapshot() });
-      return;
+    if (message?.type === "RESET_SESSION") {
+      const s = getSession(String(message.sessionId || state.activeSessionId)); if (!s) throw new Error("Sesión no encontrada");
+      if (s.running) throw new Error("Detén la sesión antes de limpiarla");
+      const name = s.name, brainTabId = s.brainTabId, workerTabId = s.workerTabId;
+      Object.assign(s, createSessionModel(name)); s.brainTabId = brainTabId; s.workerTabId = workerTabId;
+      await saveState(); sendResponse({ ok: true, state: snapshot() }); return;
     }
-
-    if (message?.type === "RESUME") {
-      state.paused = false;
-      if (state.running && state.awaitingCopyRole) {
-        state.status = "WAITING_COPY — esperando copia de " + state.awaitingCopyRole;
-        await saveState();
-      } else if (state.running && !state.activeJobId) {
-        const last = state.log.filter(x => x.role === "CEREBRO" || x.role === "OBRERO").at(-1);
-        if (!last) throw new Error("No hay un turno pendiente para continuar");
-        const nextRole = last.role === "CEREBRO" ? "OBRERO" : "CEREBRO";
-        await dispatchTurn(nextRole, last.text);
-      } else if (state.running) {
-        state.status = "RUNNING — esperando a " + state.activeRole;
-        await saveState();
-      }
-      sendResponse({ ok: true, state: snapshot() });
-      return;
-    }
-
-    if (message?.type === "STOP") {
-      state.stopRequested = true;
-      state.running = false;
-      state.paused = false;
-      state.activeJobId = null;
-      state.activeRole = null;
-      state.awaitingCopyRole = null;
-      state.awaitingCopyText = "";
-      state.awaitingCopySince = 0;
-      state.awaitingCopyCheckpoint = 0;
-      await clearCopyAlarm("CEREBRO");
-      await clearCopyAlarm("OBRERO");
-      state.status = "STOPPED";
-      await saveState();
-      sendResponse({ ok: true, state: snapshot() });
-      return;
-    }
-
-    if (message?.type === "RESET_STATE") {
-      if (state.running) throw new Error("Detén BRIDGE antes de limpiar el historial");
-      await clearCopyAlarm("CEREBRO");
-      await clearCopyAlarm("OBRERO");
-      state = { ...DEFAULT_STATE };
-      await saveState();
-      sendResponse({ ok: true, state: snapshot() });
-      return;
-    }
-
-    if (message?.type === "GET_STATE") {
-      sendResponse({ ok: true, state: snapshot() });
-      return;
-    }
-
-    if (message?.type === "EXPLICIT_COPY") {
-      const result = await handleExplicitCopy(
-        sender.tab?.id ?? null,
-        message.text
-      );
-      sendResponse(result);
-      return;
-    }
-
+    if (message?.type === "GET_STATE") { sendResponse({ ok: true, state: snapshot() }); return; }
     if (message?.type === "TURN_COMPLETE") {
-      if (sender.tab?.id !== state.brainTabId && sender.tab?.id !== state.workerTabId) {
-        sendResponse({ ok: false, error: "Pestaña no autorizada" });
-        return;
-      }
-      await finishTurn(
-        String(message.jobId || ""),
-        Boolean(message.ok),
-        String(message.role || state.activeRole || "ChatGPT"),
-        message.text,
-        message.error
-      );
-      sendResponse({ ok: true });
-      return;
+      const s = getSession(String(message.sessionId || ""));
+      if (!s || (sender.tab?.id !== s.brainTabId && sender.tab?.id !== s.workerTabId)) { sendResponse({ ok: false, error: "Pestaña no autorizada" }); return; }
+      await finishTurn(s, String(message.jobId || ""), Boolean(message.ok), String(message.role || s.activeRole || "ChatGPT"), message.text, message.error);
+      sendResponse({ ok: true }); return;
     }
-
-    if (message?.type === "BRIDGE_CONTENT_READY") {
-      sendResponse({ ok: true, tabId: sender.tab?.id ?? null });
-      return;
-    }
-
+    if (message?.type === "BRIDGE_CONTENT_READY") { sendResponse({ ok: true, tabId: sender.tab?.id ?? null }); return; }
     throw new Error("Mensaje BRIDGE desconocido");
-  })()
-    .then(() => {})
-    .catch(error => {
-      sendResponse({ ok: false, error: error.message || String(error) });
-    });
-
+  })().catch(error => sendResponse({ ok: false, error: error.message || String(error) }));
   return true;
 });
 
