@@ -2,7 +2,7 @@
 
 BRIDGE hace conversar dos pestañas normales de ChatGPT usando una extensión local de Chrome/Brave.
 
-## Qué cambió en 0.3.0
+## Qué cambió en 0.5.0
 
 El ciclo automático ya **no depende de que la ventana visual de BRIDGE permanezca abierta o visible**.
 
@@ -18,10 +18,11 @@ Esto permite:
 - Detectar si una de las pestañas fue cerrada.
 - Continuar CEREBRO → OBRERO → CEREBRO hasta TRABAJO TERMINADO, STOP o el límite de iteraciones.
 - Esperar a que cada respuesta termine de escribirse antes de aceptarla.
-- La espera de copia es independiente del tiempo de generación de la respuesta: análisis a los 60 s y timeout máximo de copia a los 120 s (2 minutos), tanto para CEREBRO como para OBRERO.
-- **No reenviar automáticamente una respuesta solo porque apareció o cambió en el chat.**
-- Requerir una **copia explícita del usuario** (selección + copiar/Ctrl+C) dentro de la última respuesta del asistente para pasar ese texto al siguiente chat.
-- Ignorar texto que el usuario esté escribiendo y palabras sueltas detectadas fuera de una copia explícita.
+- CEREBRO tiene un timeout máximo independiente de **60 s**.
+- OBRERO tiene un timeout máximo independiente de **600 s (10 min)**.
+- **El reenvío es automático:** cuando la respuesta nueva deja de cambiar y ChatGPT ya no muestra el botón de detener generación, BRIDGE toma el texto de la respuesta y lo envía directamente a la otra pestaña.
+- Ya **no hace falta seleccionar/copiar/Ctrl+C** manualmente.
+- El Bridge no espera 60/600 s para reenviar: esos valores son límites máximos. Si la respuesta termina antes, se reenvía aproximadamente 2 s después de estabilizarse.
 
 ### Limitación importante
 
@@ -69,9 +70,9 @@ Puedes usar dos pestañas ChatGPT normales, incluso con sesiones/cuentas distint
 
 El flujo será:
 
-Mensaje inicial → CEREBRO → espera respuesta completa → **espera copia explícita** → OBRERO → espera respuesta completa → **espera copia explícita** → CEREBRO → ...
+Mensaje inicial → CEREBRO → respuesta completa → **autoenvío** → OBRERO → respuesta completa → **autoenvío** → CEREBRO → ...
 
-Para evitar falsos envíos, BRIDGE no usa el texto que estés escribiendo como señal. Solo acepta una copia realizada sobre la respuesta del asistente que acaba de terminar. El texto copiado debe pertenecer a esa respuesta.
+Para evitar falsos envíos, BRIDGE compara la respuesta nueva con la respuesta que ya existía antes del turno, espera a que el texto se estabilice y comprueba que la generación terminó. No usa lo que el usuario esté escribiendo.
 
 Cuando cualquiera de los dos responda exactamente:
 
@@ -116,7 +117,7 @@ Usa las dos pestañas reales de Chrome/Brave que ya utilizas para ChatGPT. La ve
 
 ## Verificación
 
-La arquitectura 0.3.0 está preparada para que la ventana de control no sea el proceso que mantiene el ciclo. Aun así, el comportamiento real debe probarse en el Chrome/Brave del usuario porque ChatGPT puede cambiar su DOM y el navegador puede descartar pestañas en segundo plano.
+La arquitectura 0.5.0 está preparada para que la ventana de control no sea el proceso que mantiene el ciclo. Aun así, el comportamiento real debe probarse en el Chrome/Brave del usuario porque ChatGPT puede cambiar su DOM y el navegador puede descartar pestañas en segundo plano.
 
 ## Reutilización
 
