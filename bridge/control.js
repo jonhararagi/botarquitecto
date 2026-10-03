@@ -4,7 +4,9 @@ const seed = document.getElementById("seed");
 const iterations = document.getElementById("iterations");
 const brainTimeout = document.getElementById("brainTimeout");
 const workerTimeout = document.getElementById("workerTimeout");
+const minTurnDelay = document.getElementById("minTurnDelay");
 const status = document.getElementById("status");
+const log = document.getElementById("log");
 
 let running = false;
 let paused = false;
@@ -14,6 +16,26 @@ let lastForwarded = "";
 
 function setStatus(text) { status.textContent = text; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function addLog(role, text) {
+  const item = document.createElement("div");
+  item.className = "msg " + (role === "CEREBRO" ? "brain" : role === "OBRERO" ? "worker" : "system");
+
+  const who = document.createElement("div");
+  who.className = "who";
+  who.textContent = role + ":";
+
+  const body = document.createElement("div");
+  body.textContent = text;
+
+  item.append(who, body);
+  log.appendChild(item);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  log.replaceChildren();
+}
 
 async function refreshTabs() {
   const response = await chrome.runtime.sendMessage({ type: "LIST_CHATGPT_TABS" });
@@ -36,11 +58,12 @@ async function refreshTabs() {
   setStatus("IDLE — " + tabs.length + " pestañas ChatGPT detectadas");
 }
 
-async function sendAndWait(tabId, text, timeoutMs) {
+async function sendAndWait(tabId, text, timeoutMs, minTurnDelayMs) {
   const response = await chrome.tabs.sendMessage(Number(tabId), {
     type: "SEND_AND_WAIT",
     text,
-    timeoutMs
+    timeoutMs,
+    minTurnDelayMs
   });
   if (!response?.ok) throw new Error(response?.error || "La pestaña no pudo completar la operación");
   return response.text;
@@ -65,24 +88,32 @@ async function runLoop() {
   stopRequested = false;
   iteration = 0;
   lastForwarded = "";
+  clearLog();
 
   const maxIterations = Math.max(1, Math.min(100, Number(iterations.value) || 10));
   const brainTimeoutMs = Math.max(5000, Math.min(1800000, (Number(brainTimeout.value) || 120) * 1000));
   const workerTimeoutMs = Math.max(5000, Math.min(1800000, (Number(workerTimeout.value) || 900) * 1000));
+  const minTurnDelayMs = Math.max(0, Math.min(60000, (Number(minTurnDelay.value) || 0) * 1000));
 
   try {
     let message = seed.value.trim();
     let target = Number(brain.value);
+    addLog("USUARIO", message);
 
     while (!stopRequested && iteration < maxIterations) {
       await waitIfPaused();
 
       const isBrain = target === Number(brain.value);
+      const role = isBrain ? "CEREBRO" : "OBRERO";
       const timeoutMs = isBrain ? brainTimeoutMs : workerTimeoutMs;
-      setStatus("RUNNING — enviando a " + (isBrain ? "CEREBRO" : "OBRERO") + " — iteración " + (iteration + 1));
 
-      const result = (await sendAndWait(target, message, timeoutMs)).trim();
+      addLog("BRIDGE", "Enviando a " + role + "...");
+      setStatus("RUNNING — enviando a " + role + " — iteración " + (iteration + 1));
+
+      const result = (await sendAndWait(target, message, timeoutMs, minTurnDelayMs)).trim();
       if (!result) throw new Error("Respuesta vacía");
+
+      addLog(role, result);
 
       if (result === "TRABAJO TERMINADO") {
         setStatus("FINISHED — TRABAJO TERMINADO");
@@ -103,7 +134,10 @@ async function runLoop() {
     else setStatus("LIMIT_REACHED — " + iteration + " iteraciones");
   } catch (error) {
     if (error.message === "STOPPED") setStatus("STOPPED");
-    else setStatus("ERROR — " + error.message);
+    else {
+      addLog("BRIDGE", "ERROR — " + error.message);
+      setStatus("ERROR — " + error.message);
+    }
   } finally {
     running = false;
   }
