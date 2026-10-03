@@ -17,6 +17,10 @@ Esto permite:
 - Usar timeouts independientes para CEREBRO y OBRERO.
 - Detectar si una de las pestañas fue cerrada.
 - Continuar CEREBRO → OBRERO → CEREBRO hasta TRABAJO TERMINADO, STOP o el límite de iteraciones.
+- Esperar a que cada respuesta termine de escribirse antes de aceptarla.
+- **No reenviar automáticamente una respuesta solo porque apareció o cambió en el chat.**
+- Requerir una **copia explícita del usuario** (selección + copiar/Ctrl+C) dentro de la última respuesta del asistente para pasar ese texto al siguiente chat.
+- Ignorar texto que el usuario esté escribiendo y palabras sueltas detectadas fuera de una copia explícita.
 
 ### Limitación importante
 
@@ -64,13 +68,15 @@ Puedes usar dos pestañas ChatGPT normales, incluso con sesiones/cuentas distint
 
 El flujo será:
 
-Mensaje inicial → CEREBRO → OBRERO → CEREBRO → OBRERO → ...
+Mensaje inicial → CEREBRO → espera respuesta completa → **espera copia explícita** → OBRERO → espera respuesta completa → **espera copia explícita** → CEREBRO → ...
+
+Para evitar falsos envíos, BRIDGE no usa el texto que estés escribiendo como señal. Solo acepta una copia realizada sobre la respuesta del asistente que acaba de terminar. El texto copiado debe pertenecer a esa respuesta.
 
 Cuando cualquiera de los dos responda exactamente:
 
 TRABAJO TERMINADO
 
-BRIDGE pasa a FINISHED.
+BRIDGE pasa a FINISHED sin necesidad de reenviarlo al otro chat.
 
 ## Minimizar mientras trabaja
 
