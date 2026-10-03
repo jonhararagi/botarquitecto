@@ -12,6 +12,12 @@ const SEND_SELECTORS = [
   "button.composer-submit-btn"
 ];
 
+const STOP_SELECTORS = [
+  "button[data-testid=\"stop-button\"]",
+  "button[aria-label*=\"Stop\"]",
+  "button[aria-label*=\"Detener\"]"
+];
+
 const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
 
 let activeJobId = null;
@@ -38,7 +44,6 @@ function getAssistantNodes() {
   return [...document.querySelectorAll("article")].filter(article => {
     const role = article.getAttribute("data-message-author-role");
     if (role && role !== "assistant") return false;
-
     const body = article.querySelector(".markdown, [data-markdown-text-style='assistant-message']");
     const text = (body?.innerText || article.innerText || "").trim();
     return Boolean(body) && text.length > 0;
@@ -58,15 +63,13 @@ function getAssistantText(node) {
 
 function selectionBelongsToNode(selection, node) {
   if (!selection || selection.rangeCount === 0 || !node) return false;
-  const range = selection.getRangeAt(0);
-  return node.contains(range.commonAncestorContainer);
+  return node.contains(selection.getRangeAt(0).commonAncestorContainer);
 }
 
 function reportExplicitCopy() {
   const selection = window.getSelection();
   const copiedText = String(selection?.toString() || "").trim();
   const latestNode = getLatestAssistantNode();
-
   if (!copiedText || !selectionBelongsToNode(selection, latestNode)) return;
 
   chrome.runtime.sendMessage({
@@ -128,18 +131,22 @@ async function waitForSendButton(timeoutMs) {
 function stripBridgeMarker(text) {
   const value = String(text || "").trim();
   const index = value.lastIndexOf(BRIDGE_DONE_MARKER);
-  if (index === -1) return value;
-  return value.slice(0, index).trim();
+  return index === -1 ? value : value.slice(0, index).trim();
 }
 
 function hasBridgeMarker(text) {
   return String(text || "").includes(BRIDGE_DONE_MARKER);
 }
 
+function isGenerationStopped() {
+  return !firstVisible(STOP_SELECTORS);
+}
+
 async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
   let lastText = "";
   let stableSince = 0;
   let sawMarker = false;
+  let sawCompletedUi = false;
 
   while (Date.now() - sentAt < timeoutMs) {
     const latestNode = getLatestAssistantNode();
@@ -150,6 +157,7 @@ async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, ti
 
     if (hasNewResponse) {
       if (hasBridgeMarker(current)) sawMarker = true;
+      if (isGenerationStopped()) sawCompletedUi = true;
 
       if (current !== lastText) {
         lastText = current;
@@ -158,7 +166,7 @@ async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, ti
         stableSince &&
         Date.now() - stableSince >= 30000 &&
         Date.now() - sentAt >= minTurnDelayMs &&
-        sawMarker
+        (sawMarker || sawCompletedUi)
       ) {
         return stripBridgeMarker(current);
       }
@@ -167,10 +175,11 @@ async function waitForStableCompletedResponse(beforeNode, beforeText, sentAt, ti
     await new Promise(r => setTimeout(r, 250));
   }
 
-  if (sawMarker) {
-    throw new Error("[[BRIDGE_DONE]] detectado, pero la respuesta no quedó estable dentro del timeout");
-  }
-  throw new Error("Timeout esperando [[BRIDGE_DONE]] y respuesta completa");
+  throw new Error(
+    sawMarker
+      ? "[[BRIDGE_DONE]] detectado, pero la respuesta no quedó estable dentro del timeout"
+      : "Timeout esperando una respuesta completa y estable"
+  );
 }
 
 async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
@@ -183,7 +192,13 @@ async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
   const button = await waitForSendButton(10000);
   button.click();
 
-  return waitForStableCompletedResponse(beforeNode, beforeText, Date.now(), timeoutMs, minTurnDelayMs);
+  return waitForStableCompletedResponse(
+    beforeNode,
+    beforeText,
+    Date.now(),
+    timeoutMs,
+    minTurnDelayMs
+  );
 }
 
 async function runTurn(message) {
@@ -222,11 +237,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     activeJobId = String(message.jobId || "");
-    runTurn({
-      ...message,
-      role: message.role || "ChatGPT"
-    });
-
+    runTurn({ ...message, role: message.role || "ChatGPT" });
     sendResponse({ ok: true, started: true });
     return;
   }
@@ -240,6 +251,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-chrome.runtime.sendMessage({
-  type: "BRIDGE_CONTENT_READY"
-}).catch(() => {});
+chrome.runtime.sendMessage({ type: "BRIDGE_CONTENT_READY" }).catch(() => {});
