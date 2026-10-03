@@ -9,8 +9,8 @@ const LEGACY_STORAGE_KEY = "bridgeStateV3";
 // La espera de copia es independiente del tiempo de generación.
 // Primer mini-análisis a los 30 s y timeout máximo de copia a los 120 s.
 const COPY_CHECKPOINTS_MS = {
-  CEREBRO: [30000, 120000],
-  OBRERO: [30000, 120000]
+  CEREBRO: [15000, 60000],
+  OBRERO: [30000, 600000]
 };
 
 const DEFAULT_STATE = {
@@ -21,9 +21,9 @@ const DEFAULT_STATE = {
   stopRequested: false,
   iteration: 0,
   maxIterations: 10,
-  brainTimeoutMs: 120000,
-  workerTimeoutMs: 900000,
-  minTurnDelayMs: 10000,
+  brainTimeoutMs: 60000,
+  workerTimeoutMs: 600000,
+  minTurnDelayMs: 0,
   running: false,
   lastForwarded: "",
   activeRole: null,
