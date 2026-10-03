@@ -2,30 +2,34 @@
 
 BRIDGE hace conversar dos pestañas normales de ChatGPT usando una extensión local de Chrome/Brave.
 
-## Qué cambió en 0.3.0
+## Estado actual
 
-El ciclo automático ya **no depende de que la ventana visual de BRIDGE permanezca abierta o visible**.
+El ciclo automático funciona desde el service worker de la extensión: cada turno terminado y verificado se reenvía directamente al siguiente rol.
 
-El botón **🟢 ACTIVAR BRIDGE** inicia el trabajo en el service worker de la extensión. Cada turno se ejecuta dentro de la pestaña ChatGPT correspondiente y, cuando termina, la pestaña avisa a BRIDGE para continuar con la siguiente.
+Flujo:
 
-Esto permite:
+Mensaje inicial → CEREBRO → respuesta completa y estable → OBRERO → respuesta completa y estable → CEREBRO → ...
 
-- Minimizar la ventana de BRIDGE sin detener el ciclo.
-- Minimizar la ventana de Chrome/Brave sin que BRIDGE dependa de su visibilidad.
-- Cerrar la ventana de control sin detener deliberadamente el ciclo.
-- Mantener el estado y el registro de la conversación en almacenamiento local de la extensión.
-- Usar timeouts independientes para CEREBRO y OBRERO.
-- Detectar si una de las pestañas fue cerrada.
-- Continuar CEREBRO → OBRERO → CEREBRO hasta TRABAJO TERMINADO, STOP o el límite de iteraciones.
-- Esperar a que cada respuesta termine de escribirse antes de aceptarla.
-- La espera de copia es independiente del tiempo de generación de la respuesta: análisis a los 60 s y timeout máximo de copia a los 120 s (2 minutos), tanto para CEREBRO como para OBRERO.
-- **No reenviar automáticamente una respuesta solo porque apareció o cambió en el chat.**
-- Requerir una **copia explícita del usuario** (selección + copiar/Ctrl+C) dentro de la última respuesta del asistente para pasar ese texto al siguiente chat.
-- Ignorar texto que el usuario esté escribiendo y palabras sueltas detectadas fuera de una copia explícita.
+No requiere copiar/pegar manualmente entre las dos pestañas.
 
-### Limitación importante
+## Qué garantiza BRIDGE
 
-Minimizar una ventana **no es lo mismo que cerrar o descartar una pestaña**.
+- La ventana de control no mantiene viva por sí sola la ejecución.
+- El estado del ciclo se guarda en `chrome.storage.local`.
+- CEREBRO y OBRERO tienen timeouts independientes.
+- La respuesta debe ser nueva respecto de la respuesta existente antes de enviarse al siguiente rol.
+- La respuesta debe permanecer estable durante una ventana de verificación antes de aceptarse.
+- `[[BRIDGE_DONE]]` permite marcar explícitamente una respuesta como finalizada.
+- `TRABAJO TERMINADO` detiene el ciclo sin reenviar esa respuesta.
+- Se evita reenviar dos veces exactamente la misma respuesta mediante `lastForwarded`.
+- Se detecta el cierre de las pestañas configuradas.
+- PAUSAR evita iniciar el siguiente turno después del turno actual.
+- DETENER invalida el turno activo y evita que una respuesta tardía continúe el ciclo.
+- El timeout configurado mide el tiempo de generación/respuesta; la comprobación de estabilidad dispone además de una ventana de gracia de 30 segundos para evitar falsos timeouts.
+
+## Limitación importante
+
+Minimizar una ventana no es lo mismo que cerrar o descartar una pestaña.
 
 BRIDGE no puede seguir ejecutando el contenido de una pestaña que:
 
@@ -39,11 +43,12 @@ Por eso debes mantener abiertas las dos pestañas ChatGPT. Si una necesita ser r
 
 1. Descarga/clona este repositorio.
 2. Abre Chrome o Brave.
-3. Ve a chrome://extensions/ en Chrome o brave://extensions/ en Brave.
+3. Ve a `chrome://extensions/` en Chrome o `brave://extensions/` en Brave.
 4. Activa Developer mode / Modo desarrollador.
 5. Pulsa Load unpacked / Cargar descomprimida.
-6. Selecciona la carpeta bridge/.
+6. Selecciona la carpeta `bridge/`.
 7. Si ya tenías una versión anterior instalada, pulsa Reload / Recargar sobre BRIDGE.
+8. Recarga las dos pestañas ChatGPT para cargar `content.js`.
 
 ## Preparar las dos cuentas
 
@@ -52,7 +57,7 @@ Puedes usar dos pestañas ChatGPT normales, incluso con sesiones/cuentas distint
 1. Abre la pestaña que será CEREBRO.
 2. Abre la pestaña que será OBRERO.
 3. Comprueba que ambas muestran ChatGPT y que puedes escribir manualmente.
-4. Si acabas de instalar/recargar la extensión, recarga ambas pestañas para cargar content.js.
+4. Después de instalar o recargar la extensión, recarga ambas pestañas.
 
 ## Iniciar un trabajo
 
@@ -64,38 +69,34 @@ Puedes usar dos pestañas ChatGPT normales, incluso con sesiones/cuentas distint
    - Iteraciones: máximo de turnos.
    - Timeout CEREBRO: 120 segundos por defecto.
    - Timeout OBRERO: 900 segundos por defecto.
-   - Espera mínima: evita reenviar demasiado rápido una respuesta recién terminada.
-6. Pulsa 🟢 ACTIVAR BRIDGE.
+   - Espera mínima: evita aceptar demasiado rápido una respuesta recién iniciada.
+6. Pulsa ACTIVAR BRIDGE.
 
-El flujo será:
+BRIDGE envía el resultado comprobado al siguiente rol automáticamente.
 
-Mensaje inicial → CEREBRO → espera respuesta completa → **espera copia explícita** → OBRERO → espera respuesta completa → **espera copia explícita** → CEREBRO → ...
+## Finalización
 
-Para evitar falsos envíos, BRIDGE no usa el texto que estés escribiendo como señal. Solo acepta una copia realizada sobre la respuesta del asistente que acaba de terminar. El texto copiado debe pertenecer a esa respuesta.
+Si una respuesta contiene exactamente:
 
-Cuando cualquiera de los dos responda exactamente:
+`TRABAJO TERMINADO`
 
-TRABAJO TERMINADO
+el ciclo pasa a `FINISHED` y no envía esa respuesta al otro rol.
 
-BRIDGE pasa a FINISHED sin necesidad de reenviarlo al otro chat.
+También puede utilizarse:
 
-## Minimizar mientras trabaja
+`TRABAJO TERMINADO`
 
-Una vez que aparece RUNNING:
+seguido de:
 
-1. Puedes minimizar la ventana de BRIDGE.
-2. Puedes minimizar Chrome/Brave.
-3. Puedes trabajar en otra aplicación.
+`[[BRIDGE_DONE]]`
 
-No necesitas dejar BRIDGE visible.
-
-El estado se conserva en el almacenamiento local de la extensión y la ventana de control funciona principalmente como monitor.
+El marcador se elimina antes de entregar el texto al siguiente componente.
 
 ## PAUSAR / CONTINUAR / DETENER
 
 - PAUSAR: termina el turno que ya está en curso y no inicia el siguiente.
-- CONTINUAR: retoma el turno siguiente.
-- DETENER: marca el trabajo como detenido. La respuesta de un turno que ya estaba ejecutándose se ignora al llegar.
+- CONTINUAR: retoma el siguiente turno.
+- DETENER: marca el trabajo como detenido. Una respuesta de un turno ya invalidado se ignora al llegar.
 
 ## Si aparece un error de comunicación
 
@@ -108,15 +109,19 @@ Si BRIDGE dice que una pestaña no responde:
 5. Comprueba las pestañas seleccionadas.
 6. Inicia nuevamente.
 
-## Importante sobre consumo de RAM
+## Consumo de RAM
 
-BRIDGE **no crea dos Chromiums adicionales**.
+BRIDGE no crea dos Chromiums adicionales. Usa las dos pestañas reales de Chrome/Brave que ya utilizas para ChatGPT. La ventana de control es una interfaz pequeña y no necesita permanecer visible durante el ciclo.
 
-Usa las dos pestañas reales de Chrome/Brave que ya utilizas para ChatGPT. La ventana de control es una pequeña interfaz separada y el ciclo automático no necesita que permanezca visible.
+Minimizar Chrome o la ventana de control no es equivalente a cerrar las pestañas. El navegador puede, sin embargo, descartar una pestaña en segundo plano; si eso ocurre, el turno fallará de forma explícita.
 
 ## Verificación
 
-La arquitectura 0.3.0 está preparada para que la ventana de control no sea el proceso que mantiene el ciclo. Aun así, el comportamiento real debe probarse en el Chrome/Brave del usuario porque ChatGPT puede cambiar su DOM y el navegador puede descartar pestañas en segundo plano.
+La automatización real depende del DOM y del comportamiento del ChatGPT abierto en el navegador. El repositorio puede verificarse estáticamente mediante GitHub, pero una prueba end-to-end de dos pestañas reales requiere ejecutar la extensión dentro de Chrome/Brave con dos sesiones ChatGPT activas.
+
+## Historial
+
+Los cambios se mantienen en Git mediante commits separados. Antes de modificar una corrección existente, comprueba el commit y el estado de la rama para evitar sobrescribir trabajo anterior.
 
 ## Reutilización
 
