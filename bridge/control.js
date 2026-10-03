@@ -2,7 +2,8 @@ const brain = document.getElementById("brain");
 const worker = document.getElementById("worker");
 const seed = document.getElementById("seed");
 const iterations = document.getElementById("iterations");
-const timeout = document.getElementById("timeout");
+const brainTimeout = document.getElementById("brainTimeout");
+const workerTimeout = document.getElementById("workerTimeout");
 const status = document.getElementById("status");
 
 let running = false;
@@ -66,7 +67,8 @@ async function runLoop() {
   lastForwarded = "";
 
   const maxIterations = Math.max(1, Math.min(100, Number(iterations.value) || 10));
-  const timeoutMs = Math.max(5000, Math.min(600000, (Number(timeout.value) || 120) * 1000));
+  const brainTimeoutMs = Math.max(5000, Math.min(1800000, (Number(brainTimeout.value) || 120) * 1000));
+  const workerTimeoutMs = Math.max(5000, Math.min(1800000, (Number(workerTimeout.value) || 900) * 1000));
 
   try {
     let message = seed.value.trim();
@@ -74,7 +76,10 @@ async function runLoop() {
 
     while (!stopRequested && iteration < maxIterations) {
       await waitIfPaused();
-      setStatus("RUNNING — enviando a " + (target === Number(brain.value) ? "CEREBRO" : "OBRERO") + " — iteración " + (iteration + 1));
+
+      const isBrain = target === Number(brain.value);
+      const timeoutMs = isBrain ? brainTimeoutMs : workerTimeoutMs;
+      setStatus("RUNNING — enviando a " + (isBrain ? "CEREBRO" : "OBRERO") + " — iteración " + (iteration + 1));
 
       const result = (await sendAndWait(target, message, timeoutMs)).trim();
       if (!result) throw new Error("Respuesta vacía");
@@ -91,7 +96,7 @@ async function runLoop() {
       lastForwarded = result;
       message = result;
       iteration += 1;
-      target = target === Number(brain.value) ? Number(worker.value) : Number(brain.value);
+      target = isBrain ? Number(worker.value) : Number(brain.value);
     }
 
     if (stopRequested) setStatus("STOPPED");
@@ -105,7 +110,7 @@ async function runLoop() {
 }
 
 document.getElementById("refresh").onclick = () => refreshTabs().catch(e => setStatus("ERROR — " + e.message));
-document.getElementById("start").onclick = () => runLoop();
+document.getElementById("start").onclick = () => runLoop().catch(e => setStatus("ERROR — " + e.message));
 document.getElementById("pause").onclick = () => {
   if (running) {
     paused = true;
