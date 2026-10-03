@@ -321,10 +321,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.paused = false;
       state.activeJobId = null;
       state.activeRole = null;
-      state.awaitingCopyRole = null;
-      state.awaitingCopyText = "";
-      state.awaitingCopySince = 0;
-      state.awaitingCopyCheckpoint = 0;
       state.status = "STOPPED";
       await saveState();
       sendResponse({ ok: true, state: snapshot() });
