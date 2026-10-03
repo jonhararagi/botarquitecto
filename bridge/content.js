@@ -54,6 +54,30 @@ function getAssistantText(node) {
   return (body?.innerText || node.innerText || node.textContent || "").trim();
 }
 
+function selectionBelongsToNode(selection, node) {
+  if (!selection || selection.rangeCount === 0 || !node) return false;
+  const range = selection.getRangeAt(0);
+  return node.contains(range.commonAncestorContainer);
+}
+
+function reportExplicitCopy() {
+  const selection = window.getSelection();
+  const copiedText = String(selection?.toString() || "").trim();
+  const latestNode = getLatestAssistantNode();
+
+  // BRIDGE only reacts to a real user selection/copy inside the latest
+  // completed assistant response. It never treats typing or DOM changes as commands.
+  if (!copiedText || !selectionBelongsToNode(selection, latestNode)) return;
+
+  chrome.runtime.sendMessage({
+    type: "EXPLICIT_COPY",
+    text: copiedText,
+    role: "ChatGPT"
+  }).catch(() => {});
+}
+
+document.addEventListener("copy", reportExplicitCopy, true);
+
 function insertText(element, text) {
   element.focus();
 
