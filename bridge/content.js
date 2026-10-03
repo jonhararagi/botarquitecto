@@ -12,12 +12,6 @@ const SEND_SELECTORS = [
   "button.composer-submit-btn"
 ];
 
-const ASSISTANT_SELECTORS = [
-  '[data-message-author-role="assistant"]',
-  '[data-message-author-role="assistant"] .markdown',
-  'article'
-];
-
 function firstVisible(selectors) {
   for (const selector of selectors) {
     const nodes = document.querySelectorAll(selector);
@@ -36,29 +30,40 @@ function getInput() {
 function getAssistantNodes() {
   const direct = [...document.querySelectorAll('[data-message-author-role="assistant"]')];
   if (direct.length) return direct;
+
   return [...document.querySelectorAll("article")].filter(article => {
-    const text = article.innerText?.trim() || "";
-    return text.length > 0;
+    const role = article.getAttribute("data-message-author-role");
+    if (role && role !== "assistant") return false;
+
+    const body = article.querySelector(".markdown, [data-markdown-text-style='assistant-message']");
+    const text = (body?.innerText || article.innerText || "").trim();
+    return Boolean(body) && text.length > 0;
   });
 }
 
-function getLatestAssistantText() {
+function getLatestAssistantNode() {
   const nodes = getAssistantNodes();
-  if (!nodes.length) return "";
-  const node = nodes[nodes.length - 1];
+  return nodes[nodes.length - 1] || null;
+}
+
+function getAssistantText(node) {
+  if (!node) return "";
   const body = node.querySelector(".markdown, [data-markdown-text-style='assistant-message']");
   return (body?.innerText || node.innerText || node.textContent || "").trim();
+}
+
+function getLatestAssistantText() {
+  return getAssistantText(getLatestAssistantNode());
 }
 
 function insertText(element, text) {
   element.focus();
 
   if (element.matches("textarea, input")) {
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype, "value"
-    )?.set || Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype, "value"
-    )?.set;
+    const proto = element instanceof HTMLInputElement
+      ? HTMLInputElement.prototype
+      : HTMLTextAreaElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
     if (setter) setter.call(element, text);
     else element.value = text;
   } else {
@@ -98,29 +103,37 @@ async function waitForSendButton(timeoutMs) {
   throw new Error("ChatGPT send button not found or disabled");
 }
 
-async function sendAndWait(text, timeoutMs = 120000) {
+async function sendAndWait(text, timeoutMs = 120000, minTurnDelayMs = 10000) {
   const input = await waitForInput(10000);
-  const beforeCount = getAssistantNodes().length;
-  const beforeText = getLatestAssistantText();
+  const beforeNode = getLatestAssistantNode();
+  const beforeText = getAssistantText(beforeNode);
 
   insertText(input, text);
 
   const button = await waitForSendButton(10000);
   button.click();
 
-  const started = Date.now();
+  const sentAt = Date.now();
+  const stableRequiredMs = 1800;
   let lastText = "";
   let stableSince = 0;
 
-  while (Date.now() - started < timeoutMs) {
-    const nodes = getAssistantNodes();
-    const current = getLatestAssistantText();
+  while (Date.now() - sentAt < timeoutMs) {
+    const latestNode = getLatestAssistantNode();
+    const current = getAssistantText(latestNode);
+    const isNewNode = latestNode && latestNode !== beforeNode;
+    const isUpdatedResponse = current && current !== beforeText;
+    const hasNewResponse = Boolean(current && (isNewNode || isUpdatedResponse));
 
-    if (nodes.length > beforeCount && current && current !== beforeText) {
+    if (hasNewResponse) {
       if (current !== lastText) {
         lastText = current;
         stableSince = Date.now();
-      } else if (stableSince && Date.now() - stableSince >= 1400) {
+      } else if (
+        stableSince &&
+        Date.now() - stableSince >= stableRequiredMs &&
+        Date.now() - sentAt >= minTurnDelayMs
+      ) {
         return current;
       }
     }
@@ -131,14 +144,13 @@ async function sendAndWait(text, timeoutMs = 120000) {
   throw new Error("Timeout waiting for complete ChatGPT response");
 }
 
-chrome.runtime.sendMessage({
-  type: "BRIDGE_CONTENT_READY",
-  tabId: chrome.runtime?.id ? null : null
-}).catch(() => {});
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "SEND_AND_WAIT") {
-    sendAndWait(String(message.text || ""), Number(message.timeoutMs) || 120000)
+    sendAndWait(
+      String(message.text || ""),
+      Number(message.timeoutMs) || 120000,
+      Number(message.minTurnDelayMs) || 10000
+    )
       .then(text => sendResponse({ ok: true, text }))
       .catch(error => sendResponse({ ok: false, error: error.message || String(error) }));
     return true;
