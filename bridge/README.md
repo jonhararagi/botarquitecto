@@ -1,6 +1,6 @@
 # BRIDGE — ChatGPT two-tab loop
 
-BRIDGE hace conversar dos pestañas normales de ChatGPT usando una extensión local de Chrome/Brave.
+BRIDGE hace conversar dos pestañas normales de ChatGPT usando exclusivamente una extensión de navegador Chromium (Chrome, Brave y navegadores Chromium compatibles). No necesita programa externo, ejecutable, servidor local, puente nativo ni dos Chromiums adicionales.
 
 ## Estado actual
 
@@ -14,7 +14,7 @@ No requiere copiar/pegar manualmente entre las dos pestañas.
 
 ## Qué garantiza BRIDGE
 
-- La ventana de control no mantiene viva por sí sola la ejecución.
+- La interfaz de control es una pestaña normal de la extensión y no mantiene viva por sí sola la ejecución.
 - El estado del ciclo se guarda en `chrome.storage.local`.
 - CEREBRO y OBRERO tienen timeouts independientes.
 - La respuesta debe ser nueva respecto de la respuesta existente antes de enviarse al siguiente rol.
@@ -26,6 +26,12 @@ No requiere copiar/pegar manualmente entre las dos pestañas.
 - PAUSAR evita iniciar el siguiente turno después del turno actual.
 - DETENER invalida el turno activo y evita que una respuesta tardía continúe el ciclo.
 - El timeout configurado mide el tiempo de generación/respuesta; la comprobación de estabilidad dispone además de una ventana de gracia de 30 segundos para evitar falsos timeouts.
+
+## Arquitectura de navegador
+
+BRIDGE funciona dentro del perfil del navegador donde está instalada la extensión. Cada perfil/instancia del navegador tiene su propio contexto de extensión y su propio estado `chrome.storage.local`; esto evita depender de una aplicación externa o de comunicación entre procesos del sistema. Las pestañas CEREBRO y OBRERO deben pertenecer al mismo perfil que ejecuta BRIDGE.
+
+El botón de la extensión abre `control.html` como una pestaña normal. Ya no utiliza `chrome.windows.create({ type: "popup" })`, evitando el punto de fallo que podía aparecer al abrir la interfaz como popup en configuraciones de Brave o con múltiples ventanas/instancias.
 
 ## Limitación importante
 
@@ -42,8 +48,8 @@ Por eso debes mantener abiertas las dos pestañas ChatGPT. Si una necesita ser r
 ## Instalación
 
 1. Descarga/clona este repositorio.
-2. Abre Chrome o Brave.
-3. Ve a `chrome://extensions/` en Chrome o `brave://extensions/` en Brave.
+2. Abre Chrome, Brave u otro navegador Chromium compatible.
+3. Ve a la página de extensiones del navegador (`chrome://extensions/` en Chrome o `brave://extensions/` en Brave).
 4. Activa Developer mode / Modo desarrollador.
 5. Pulsa Load unpacked / Cargar descomprimida.
 6. Selecciona la carpeta `bridge/`.
@@ -61,7 +67,7 @@ Puedes usar dos pestañas ChatGPT normales, incluso con sesiones/cuentas distint
 
 ## Iniciar un trabajo
 
-1. Pulsa el icono de BRIDGE.
+1. Pulsa el icono de BRIDGE. Se abrirá o enfocará la pestaña de control de la extensión.
 2. En CEREBRO, selecciona la primera pestaña.
 3. En OBRERO, selecciona la segunda.
 4. Escribe el mensaje inicial.
@@ -111,7 +117,7 @@ Si BRIDGE dice que una pestaña no responde:
 
 ## Consumo de RAM
 
-BRIDGE no crea dos Chromiums adicionales. Usa las dos pestañas reales de Chrome/Brave que ya utilizas para ChatGPT. La ventana de control es una interfaz pequeña y no necesita permanecer visible durante el ciclo.
+BRIDGE no crea dos Chromiums adicionales. Usa las dos pestañas reales del navegador que ya utilizas para ChatGPT. La interfaz de control es una pestaña pequeña de la propia extensión y no necesita permanecer enfocada durante el ciclo.
 
 Minimizar Chrome o la ventana de control no es equivalente a cerrar las pestañas. El navegador puede, sin embargo, descartar una pestaña en segundo plano; si eso ocurre, el turno fallará de forma explícita.
 
