@@ -395,8 +395,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "RESET_SESSION") {
       const s = getSession(String(message.sessionId || state.activeSessionId)); if (!s) throw new Error("Sesión no encontrada");
       if (s.running) throw new Error("Detén la sesión antes de limpiarla");
+      const id = s.id;
       const name = s.name, brainTabId = s.brainTabId, workerTabId = s.workerTabId;
-      Object.assign(s, createSessionModel(name)); s.brainTabId = brainTabId; s.workerTabId = workerTabId;
+      Object.assign(s, createSessionModel(name));
+      // RESET_SESSION resets the model, not the session's public identity.
+      // Keep activeSessionId and any UI references valid after the reset.
+      s.id = id;
+      s.brainTabId = brainTabId;
+      s.workerTabId = workerTabId;
       await saveState(); sendResponse({ ok: true, state: snapshot() }); return;
     }
     if (message?.type === "GET_STATE") { sendResponse({ ok: true, state: snapshot() }); return; }
