@@ -21,6 +21,7 @@ const STOP_SELECTORS = [
 const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
 const RESPONSE_STABLE_MS = 2000;
 let activeJobId = null;
+let activeJobCancelled = false;
 
 function firstVisible(selectors) {
   for (const selector of selectors) {
@@ -245,6 +246,7 @@ async function runTurn(message) {
       Number(message.minTurnDelayMs) || 0
     );
 
+    if (activeJobCancelled) throw new Error("Turno cancelado por BRIDGE");
     await reportTurnComplete(message, { ok: true, text });
   } catch (error) {
     try {
@@ -256,7 +258,10 @@ async function runTurn(message) {
       console.error("BRIDGE no pudo confirmar el resultado del turno", reportError);
     }
   } finally {
-    if (activeJobId === message.jobId) activeJobId = null;
+    if (activeJobId === message.jobId) {
+      activeJobId = null;
+      activeJobCancelled = false;
+    }
   }
 }
 
@@ -268,8 +273,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     activeJobId = String(message.jobId || "");
+    activeJobCancelled = false;
     runTurn({ ...message, role: message.role || "ChatGPT" });
     sendResponse({ ok: true, started: true });
+    return;
+  }
+
+  if (message?.type === "CANCEL_TURN") {
+    if (String(message.jobId || "") === activeJobId && activeJobId) {
+      activeJobCancelled = true;
+      const stopButton = firstVisible(STOP_SELECTORS);
+      if (stopButton) stopButton.click();
+      sendResponse({ ok: true, cancelled: true });
+    } else {
+      sendResponse({ ok: true, cancelled: false });
+    }
     return;
   }
 
