@@ -14,10 +14,41 @@ function getDistinctDefault(role){
   if(role==="CEREBRO") return tabs[0].id;
   return tabs.find(t=>t.id!==Number(brain.value))?.id ?? tabs[0].id;
 }
+function updateDashboard(x){
+  const metricStatus=document.getElementById("metricStatus");
+  const metricStatusDetail=document.getElementById("metricStatusDetail");
+  const metricIteration=document.getElementById("metricIteration");
+  const metricRole=document.getElementById("metricRole");
+  const metricJob=document.getElementById("metricJob");
+  const metricTabs=document.getElementById("metricTabs");
+  const metricTabsDetail=document.getElementById("metricTabsDetail");
+  const progressBar=document.getElementById("progressBar");
+  const progressTrack=document.getElementById("progressTrack");
+  const brainSummary=document.getElementById("brainSummary");
+  const workerSummary=document.getElementById("workerSummary");
+  const statusValue=String(x.status||"IDLE");
+  const tone=statusValue.startsWith("ERROR")?"error":(x.running||statusValue.includes("RUNNING")||statusValue.includes("STARTING"))?"good":(statusValue.includes("PAUSED")||statusValue.includes("LIMIT_REACHED"))?"warn":"";
+  status.dataset.tone=tone;
+  metricStatus.textContent=x.running?(x.paused?"PAUSADA":"EN CURSO"):statusValue.split(" — ")[0];
+  metricStatusDetail.textContent=statusValue;
+  const max=Math.max(1,Number(x.maxIterations)||10);
+  const iteration=Math.max(0,Math.min(max,Number(x.iteration)||0));
+  metricIteration.textContent=iteration+" / "+max;
+  const percent=Math.round(iteration/max*100);
+  progressBar.style.width=percent+"%";
+  progressTrack.setAttribute("aria-valuenow",String(percent));
+  metricRole.textContent=x.activeRole||(x.running?(x.paused?"PAUSA":"PREPARADO"):"—");
+  metricJob.textContent=x.activeJobId?"Job "+x.activeJobId.slice(0,8):"Sin trabajo activo";
+  metricTabs.textContent=String(tabs.length);
+  metricTabsDetail.textContent=tabs.length===0?"No se detectaron pestañas ChatGPT":"Pestañas ChatGPT disponibles";
+  const titleFor=id=>{if(id==null)return "Sin asignar";const t=tabs.find(tab=>tab.id===id);return t?(t.title||("Pestaña "+id)):"Pestaña "+id+" (no detectada)"};
+  brainSummary.textContent=titleFor(x.brainTabId);
+  workerSummary.textContent=titleFor(x.workerTabId);
+}
 function render(s){if(!s)return;state=s;sessionSelect.replaceChildren();for(const x of s.sessions||[])sessionSelect.add(new Option(x.name+(x.running?" ●":""),x.id));sessionSelect.value=s.activeSessionId;const x=current();if(!x)return;sessionName.value=x.name;fillTabs(brain,x.brainTabId,selectedBrainTabId);
 fillTabs(worker,x.workerTabId,selectedWorkerTabId);
 if(x.brainTabId==null&&selectedBrainTabId==null&&brain.options.length) brain.value=String(getDistinctDefault("CEREBRO"));
-if(x.workerTabId==null&&selectedWorkerTabId==null&&worker.options.length) worker.value=String(getDistinctDefault("OBRERO"));statusText(x.status||"IDLE");iterations.value=x.maxIterations||10;brainTimeout.value=Math.round((x.brainTimeoutMs||60000)/1000);workerTimeout.value=Math.round((x.workerTimeoutMs||600000)/1000);minTurnDelay.value=Math.round((x.minTurnDelayMs||0)/1000);const key=JSON.stringify(x.log||[])+x.id;if(key!==lastLog){lastLog=key;log.replaceChildren();for(const e of x.log||[])addLog(e.role,e.text);log.scrollTop=log.scrollHeight}const active=!!x.running;for(const e of [sessionName,brain,worker,iterations,brainTimeout,workerTimeout,minTurnDelay,deleteButton])e.disabled=active;startButton.disabled=active}
+if(x.workerTabId==null&&selectedWorkerTabId==null&&worker.options.length) worker.value=String(getDistinctDefault("OBRERO"));statusText(x.status||"IDLE");updateDashboard(x);iterations.value=x.maxIterations||10;brainTimeout.value=Math.round((x.brainTimeoutMs||60000)/1000);workerTimeout.value=Math.round((x.workerTimeoutMs||600000)/1000);minTurnDelay.value=Math.round((x.minTurnDelayMs||0)/1000);const key=JSON.stringify(x.log||[])+x.id;if(key!==lastLog){lastLog=key;log.replaceChildren();if(!(x.log||[]).length){const empty=document.createElement("div");empty.className="empty";empty.textContent="Todavía no hay actividad. Activa una sesión para ver aquí los mensajes.";log.appendChild(empty)}else{for(const e of x.log||[])addLog(e.role,e.text)}log.scrollTop=log.scrollHeight}const active=!!x.running;for(const e of [sessionName,brain,worker,iterations,brainTimeout,workerTimeout,minTurnDelay,deleteButton])e.disabled=active;startButton.disabled=active}
 async function send(m){const r=await chrome.runtime.sendMessage(m);if(!r?.ok)throw Error(r?.error||"BRIDGE rechazó la operación");if(r.state)render(r.state);return r}
 async function refresh(){const r=await send({type:"LIST_CHATGPT_TABS"});tabs=r.tabs||[];render(r.state)}
 sessionSelect.onchange=async()=>{
