@@ -15,21 +15,35 @@ function createSessionModel(name = "Sesión 1") {
 const DEFAULT_STATE = { version: 5, activeSessionId: null, sessions: [] };
 let state = structuredClone(DEFAULT_STATE);
 let hydrated = false;
+let hydrationPromise = null;
 
 async function hydrate() {
   if (hydrated) return;
-  const saved = await chrome.storage.local.get(STORAGE_KEY);
-  if (saved?.[STORAGE_KEY]?.sessions) state = saved[STORAGE_KEY];
-  if (!Array.isArray(state.sessions)) state.sessions = [];
-  if (!state.sessions.length) {
-    const s = createSessionModel("Sesión 1");
-    state.sessions.push(s);
-    state.activeSessionId = s.id;
+  // Runtime messages can arrive concurrently during MV3 worker startup.
+  // Share one in-flight hydration so a second request cannot reload stale
+  // storage over state mutations performed by the first request.
+  if (hydrationPromise) return hydrationPromise;
+
+  hydrationPromise = (async () => {
+    const saved = await chrome.storage.local.get(STORAGE_KEY);
+    if (saved?.[STORAGE_KEY]?.sessions) state = saved[STORAGE_KEY];
+    if (!Array.isArray(state.sessions)) state.sessions = [];
+    if (!state.sessions.length) {
+      const s = createSessionModel("Sesión 1");
+      state.sessions.push(s);
+      state.activeSessionId = s.id;
+    }
+    if (!state.activeSessionId || !state.sessions.some(s => s.id === state.activeSessionId)) state.activeSessionId = state.sessions[0].id;
+    hydrated = true;
+    await saveState();
+    await reconcileRunningSessions();
+  })();
+
+  try {
+    await hydrationPromise;
+  } finally {
+    hydrationPromise = null;
   }
-  if (!state.activeSessionId || !state.sessions.some(s => s.id === state.activeSessionId)) state.activeSessionId = state.sessions[0].id;
-  hydrated = true;
-  await saveState();
-  await reconcileRunningSessions();
 }
 // Serialize persistence writes so a slower, older storage operation cannot
 // overwrite a newer transition (for example STOP racing with TURN_COMPLETE).
