@@ -505,6 +505,30 @@ test("diagnostic panel displays cause, failed role, tab and recovery guidance", 
 });
 
 
+test("RESET_SESSION preserves stable identity, active selection, and configured tabs", async () => {
+  const { listeners } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+
+  const saved = await send(listeners, {
+    type: "SAVE_SESSION", sessionId: session.id, name: session.name,
+    brainTabId: 11, workerTabId: 22, maxIterations: 10,
+    brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  assert.equal(saved.ok, true);
+
+  const reset = await send(listeners, { type: "RESET_SESSION", sessionId: session.id });
+  assert.equal(reset.ok, true);
+  assert.equal(reset.state.activeSessionId, session.id);
+  const resetSession = reset.state.sessions.find(item => item.id === session.id);
+  assert.ok(resetSession, "reset must not replace the session's stable ID");
+  assert.equal(resetSession.id, session.id);
+  assert.equal(resetSession.brainTabId, 11);
+  assert.equal(resetSession.workerTabId, 22);
+  assert.equal(resetSession.status, "IDLE");
+  assert.equal(resetSession.running, false);
+});
+
 test("empty response diagnosis preserves the originating role and tab", async () => {
   const { listeners } = await readyWorker();
   const initial = await send(listeners, { type: "GET_STATE" });
