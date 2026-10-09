@@ -22,10 +22,14 @@ function loadWorker(initialStorage = {}, options = {}) {
         async get(key) { return { [key]: stored[key] }; },
         async set(value) {
           const snapshot = options.cloneWrites ? structuredClone(value) : value;
-          options.onSet?.(snapshot);
+          const cleanup = options.onSet?.(snapshot);
           const delayMs = options.delayFor?.(snapshot) || 0;
-          if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
-          Object.assign(stored, snapshot);
+          try {
+            if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+            Object.assign(stored, snapshot);
+          } finally {
+            if (typeof cleanup === "function") cleanup();
+          }
         }
       }
     },
@@ -265,10 +269,7 @@ test("concurrent state transitions serialize storage writes", async () => {
       if (snapshot.bridgeStateV5?.sessions?.some(item => item.completingJobId)) {
         completingSnapshotSeen();
       }
-      // Count completion is tracked by delayFor's matching snapshot.
-      const delayMs = snapshot.bridgeStateV5?.sessions?.some(item => item.completingJobId) ? 60 : 0;
-      if (delayMs) setTimeout(() => { activeWrites--; }, delayMs);
-      else setTimeout(() => { activeWrites--; }, 0);
+      return () => { activeWrites--; };
     }
   });
 
