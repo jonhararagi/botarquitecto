@@ -96,3 +96,7 @@ Se distinguen, cuando el mensaje registrado lo permite, timeouts, pestañas cerr
 Al activar un ciclo nuevo se limpia el diagnóstico anterior. Las sesiones guardadas por versiones previas pueden no tener un diagnóstico estructurado; en ese caso el panel indica que el motivo exacto no está disponible y muestra el estado/historial que sí se conserva.
 
 La suite de regresión verifica que se persistan el rol, la pestaña y los pasos de recuperación, así como el diagnóstico de STOP y los elementos principales del panel. Sigue siendo necesaria la prueba manual en Chrome o Brave con dos conversaciones reales para validar la experiencia completa de extremo a extremo.
+
+## Validación manual antes de integrar
+
+La CI automatizada no sustituye la prueba de la extensión instalada con dos conversaciones reales. Antes de sacar la rama de borrador, sigue [`bridge/MANUAL-E2E-CHECKLIST.md`](./MANUAL-E2E-CHECKLIST.md), registra el SHA y el navegador usados y conserva evidencia redactada. Un caso `BLOCKED` o `NOT RUN` no cuenta como aprobado. No integres mientras los casos obligatorios de ciclo básico, STOP, timeout y ausencia de duplicados no estén en `PASS`.
