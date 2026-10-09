@@ -9,7 +9,7 @@ const WATCHDOG_ALARM = "bridge-turn-watchdog";
 
 function makeId() { return "session-" + crypto.randomUUID(); }
 function createSessionModel(name = "Sesión 1") {
-  return { id: makeId(), name, brainTabId: null, workerTabId: null, status: "IDLE", paused: false, stopRequested: false, running: false, iteration: 0, maxIterations: DEFAULT_SETTINGS.maxIterations, brainTimeoutMs: DEFAULT_SETTINGS.brainTimeoutMs, workerTimeoutMs: DEFAULT_SETTINGS.workerTimeoutMs, minTurnDelayMs: DEFAULT_SETTINGS.minTurnDelayMs, lastForwarded: "", activeRole: null, activeJobId: null, activeJobStartedAt: null, activeJobTimeoutMs: null, log: [] };
+  return { id: makeId(), name, brainTabId: null, workerTabId: null, status: "IDLE", paused: false, stopRequested: false, running: false, iteration: 0, maxIterations: DEFAULT_SETTINGS.maxIterations, brainTimeoutMs: DEFAULT_SETTINGS.brainTimeoutMs, workerTimeoutMs: DEFAULT_SETTINGS.workerTimeoutMs, minTurnDelayMs: DEFAULT_SETTINGS.minTurnDelayMs, lastForwarded: "", activeRole: null, activeJobId: null, activeJobStartedAt: null, activeJobTimeoutMs: null, completingJobId: null, log: [] };
 }
 
 const DEFAULT_STATE = { version: 5, activeSessionId: null, sessions: [] };
@@ -65,7 +65,7 @@ async function expireActiveTurn(s, reason) {
 async function checkActiveTurnDeadlines() {
   const now = Date.now();
   for (const s of [...state.sessions]) {
-    if (!s.running || !s.activeJobId) continue;
+    if (!s.running || !s.activeJobId || s.completingJobId === s.activeJobId) continue;
     const startedAt = Number(s.activeJobStartedAt) || 0;
     const timeoutMs = Number(s.activeJobTimeoutMs) || 0;
     if (!startedAt || !timeoutMs) {
@@ -79,7 +79,9 @@ async function checkActiveTurnDeadlines() {
 
 async function reconcileRunningSessions() {
   for (const s of [...state.sessions]) {
-    if (s.running && (!s.activeJobId || !s.activeRole)) {
+    if (s.running && s.completingJobId && s.completingJobId === s.activeJobId) {
+      await failSession(s, "Recuperación segura: el servicio se reinició durante la confirmación de un turno");
+    } else if (s.running && (!s.activeJobId || !s.activeRole)) {
       await failSession(s, "Recuperación segura: la sesión figuraba activa pero no tenía un turno recuperable");
     }
   }
@@ -109,7 +111,7 @@ async function dispatchTurn(s, role, text) {
   const timeoutMs = role === "CEREBRO" ? s.brainTimeoutMs : s.workerTimeoutMs;
   const jobId = crypto.randomUUID();
   await ensureTabAlive(tabId, role);
-  s.activeRole = role; s.activeJobId = jobId; s.activeJobStartedAt = Date.now(); s.activeJobTimeoutMs = timeoutMs;
+  s.activeRole = role; s.activeJobId = jobId; s.activeJobStartedAt = Date.now(); s.activeJobTimeoutMs = timeoutMs; s.completingJobId = null;
   s.status = "RUNNING — " + s.name + " — " + role;
   await saveState();
   await updateWatchdogAlarm();
@@ -126,7 +128,7 @@ async function dispatchTurn(s, role, text) {
 
 async function failSession(s, message) {
   s.running = false; s.activeRole = null; s.activeJobId = null;
-  s.activeJobStartedAt = null; s.activeJobTimeoutMs = null;
+  s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null;
   s.status = "ERROR — " + message;
   await addLog(s, "BRIDGE", "ERROR — " + message);
   await saveState();
@@ -135,24 +137,43 @@ async function failSession(s, message) {
 
 async function finishTurn(s, jobId, ok, role, text, error) {
   if (!s.running || s.stopRequested || jobId !== s.activeJobId) return;
-  s.activeJobId = null; s.activeRole = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null;
-  await updateWatchdogAlarm();
-  if (!ok) return failSession(s, role + " — " + (error || "error desconocido"));
+  if (!ok) {
+    s.activeJobId = null; s.activeRole = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null;
+    await updateWatchdogAlarm();
+    return failSession(s, role + " — " + (error || "error desconocido"));
+  }
   const result = String(text || "").trim();
-  if (!result) return failSession(s, role + " devolvió una respuesta vacía");
-  await addLog(s, role, result);
-  // STOP may arrive while the log is being persisted. Never restart the loop afterwards.
-  if (!s.running || s.stopRequested) {
+  if (!result) {
+    s.activeJobId = null; s.activeRole = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null;
+    await updateWatchdogAlarm();
+    return failSession(s, role + " devolvió una respuesta vacía");
+  }
+  if (s.completingJobId === jobId) return;
+  // Keep the active job identity while persisting the result. This lets STOP cancel
+  // the real tab and makes concurrent duplicate acknowledgements idempotent.
+  s.completingJobId = jobId;
+  await saveState();
+  if (!s.running || s.stopRequested || s.activeJobId !== jobId) {
+    if (s.completingJobId === jobId) s.completingJobId = null;
     s.status = "STOPPED";
     return saveState();
   }
-  if (result === "TRABAJO TERMINADO") { s.running = false; s.status = "FINISHED — TRABAJO TERMINADO"; return saveState(); }
+  await addLog(s, role, result);
+  // STOP may arrive while the log is being persisted. Never restart the loop afterwards.
+  if (!s.running || s.stopRequested || s.activeJobId !== jobId) {
+    if (s.completingJobId === jobId) s.completingJobId = null;
+    s.status = "STOPPED";
+    return saveState();
+  }
+  s.activeJobId = null; s.activeRole = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null;
+  await updateWatchdogAlarm();
+  if (result === "TRABAJO TERMINADO") { s.running = false; s.status = "FINISHED — TRABAJO TERMINADO"; await saveState(); await updateWatchdogAlarm(); return; }
   if (result === s.lastForwarded) return failSession(s, "Respuesta duplicada detectada");
 
   const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
   s.lastForwarded = result; s.iteration++;
-  if (s.iteration >= s.maxIterations) { s.running = false; s.status = "LIMIT_REACHED — " + s.iteration + " iteraciones"; return saveState(); }
-  if (s.paused) { s.status = "PAUSED — siguiente: " + nextRole; return saveState(); }
+  if (s.iteration >= s.maxIterations) { s.running = false; s.status = "LIMIT_REACHED — " + s.iteration + " iteraciones"; await saveState(); await updateWatchdogAlarm(); return; }
+  if (s.paused) { s.status = "PAUSED — siguiente: " + nextRole; await saveState(); await updateWatchdogAlarm(); return; }
 
   s.status = "AUTO_FORWARD — " + role + " → " + nextRole;
   await addLog(s, "BRIDGE", "Respuesta verificada. Enviando automáticamente a " + nextRole + ".");
@@ -262,7 +283,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       s.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
       s.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
       s.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
-      s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.activeRole = null; s.activeJobId = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.log = []; s.status = "STARTING";
+      s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.activeRole = null; s.activeJobId = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null; s.log = []; s.status = "STARTING";
       state.activeSessionId = s.id; await saveState(); await addLog(s, "USUARIO", seed);
       try { await dispatchTurn(s, "CEREBRO", seed); } catch (e) { await failSession(s, e.message || String(e)); }
       sendResponse({ ok: true, state: snapshot() }); return;
@@ -293,6 +314,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         s.activeRole = null;
         s.activeJobStartedAt = null;
         s.activeJobTimeoutMs = null;
+        s.completingJobId = null;
         s.status = "STOPPED";
       }
       await saveState();
@@ -332,6 +354,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const senderTabId = sender.tab?.id;
       if (senderTabId !== s.brainTabId && senderTabId !== s.workerTabId) {
         sendResponse({ ok: false, error: "Pestaña no autorizada para esta sesión" });
+        return;
+      }
+
+      if (s.completingJobId && s.completingJobId === jobId) {
+        sendResponse({ ok: true, duplicate: true });
         return;
       }
 
