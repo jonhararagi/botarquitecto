@@ -42,6 +42,7 @@ function loadWorker(initialStorage = {}, options = {}) {
         return tabs.get(id);
       },
       async sendMessage(tabId, message) {
+        if (options.beforeSendMessage) await options.beforeSendMessage(tabId, message);
         sent.push({ tabId, message });
         return { ok: true };
       },
@@ -358,3 +359,48 @@ test("concurrent cold-start messages share one state hydration", async () => {
   assert.equal(second.state.sessions.length, 1);
   assert.equal(first.state.sessions[0].id, second.state.sessions[0].id);
 });
+
+test("STOP racing with START_TURN acknowledgement sends a cancellation after the late start", async () => {
+  let enteredResolve;
+  let releaseResolve;
+  const enteredStart = new Promise(resolve => { enteredResolve = resolve; });
+  const releaseStart = new Promise(resolve => { releaseResolve = resolve; });
+  const worker = await readyWorker({
+    async beforeSendMessage(tabId, message) {
+      if (message.type === "START_TURN") {
+        enteredResolve();
+        await releaseStart;
+      }
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const startPromise = send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "STOP while START_TURN acknowledgement is pending", maxIterations: 10,
+    brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+
+  await enteredStart;
+  const stopped = await send(worker.listeners, { type: "STOP", sessionId: session.id });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.state.sessions.find(item => item.id === session.id).status, "STOPPED");
+
+  releaseResolve();
+  await startPromise;
+
+  const lateMessages = worker.sent.filter(item => item.message.jobId && item.message.type !== "CANCEL_TURN");
+  const startMessage = lateMessages.find(item => item.message.type === "START_TURN");
+  assert.ok(startMessage, "the test must exercise a START_TURN already in flight");
+  const finalMessage = worker.sent.at(-1);
+  assert.equal(finalMessage.message.type, "CANCEL_TURN");
+  assert.equal(finalMessage.message.jobId, startMessage.message.jobId);
+
+  const finalState = await send(worker.listeners, { type: "GET_STATE" });
+  const finalSession = finalState.state.sessions.find(item => item.id === session.id);
+  assert.equal(finalSession.status, "STOPPED");
+  assert.equal(finalSession.running, false);
+  assert.equal(finalSession.activeJobId, null);
+});
+
