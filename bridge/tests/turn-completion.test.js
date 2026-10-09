@@ -153,3 +153,15 @@ test("content script includes session identity and checks the completion acknowl
   assert.match(source, /async function waitForCompletedResponse\([^\n]+shouldCancel = \(\) => false\)/);
   assert.match(source, /if \(shouldCancel\(\)\) throw new Error\("Turno cancelado por BRIDGE"\)/);
 });
+
+test("extension JavaScript parses and manifest declares an MV3 content script", () => {
+  const { execFileSync } = require("node:child_process");
+  for (const file of ["content.js", "service-worker.js", "control.js", "popup.js"]) {
+    execFileSync(process.execPath, ["--check", path.join(root, file)]);
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+  assert.equal(manifest.manifest_version, 3);
+  assert.ok(manifest.content_scripts.some(script => script.js.includes("content.js")));
+  assert.ok(manifest.background.service_worker);
+});
