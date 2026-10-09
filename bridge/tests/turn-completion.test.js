@@ -7,7 +7,7 @@ const { webcrypto } = require("node:crypto");
 
 const root = path.resolve(__dirname, "..");
 
-function loadWorker(initialStorage = {}) {
+function loadWorker(initialStorage = {}, options = {}) {
   const stored = { ...initialStorage };
   const sent = [];
   const tabs = new Map([
@@ -20,7 +20,13 @@ function loadWorker(initialStorage = {}) {
     storage: {
       local: {
         async get(key) { return { [key]: stored[key] }; },
-        async set(value) { Object.assign(stored, value); }
+        async set(value) {
+          const snapshot = options.cloneWrites ? structuredClone(value) : value;
+          options.onSet?.(snapshot);
+          const delayMs = options.delayFor?.(snapshot) || 0;
+          if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+          Object.assign(stored, snapshot);
+        }
       }
     },
     tabs: {
@@ -78,8 +84,8 @@ function send(listeners, message, tabId) {
   });
 }
 
-async function readyWorker() {
-  const worker = loadWorker();
+async function readyWorker(options = {}) {
+  const worker = loadWorker({}, options);
   await new Promise(resolve => setTimeout(resolve, 10));
   return worker;
 }
@@ -238,4 +244,57 @@ test("service-worker restart fails closed if completion persistence was interrup
   assert.equal(sessionAfterRestart.activeJobId, null);
   assert.match(sessionAfterRestart.status, /ERROR/);
   assert.match(sessionAfterRestart.status, /reinició durante la confirmación/i);
+});
+
+
+test("concurrent state transitions serialize storage writes", async () => {
+  let activeWrites = 0;
+  let maxActiveWrites = 0;
+  let completingSnapshotSeen;
+  const completingSnapshot = new Promise(resolve => { completingSnapshotSeen = resolve; });
+
+  const worker = await readyWorker({
+    cloneWrites: true,
+    delayFor(snapshot) {
+      const session = snapshot.bridgeStateV5?.sessions?.find(item => item.completingJobId);
+      return session ? 60 : 0;
+    },
+    onSet(snapshot) {
+      activeWrites++;
+      maxActiveWrites = Math.max(maxActiveWrites, activeWrites);
+      if (snapshot.bridgeStateV5?.sessions?.some(item => item.completingJobId)) {
+        completingSnapshotSeen();
+      }
+      // Count completion is tracked by delayFor's matching snapshot.
+      const delayMs = snapshot.bridgeStateV5?.sessions?.some(item => item.completingJobId) ? 60 : 0;
+      if (delayMs) setTimeout(() => { activeWrites--; }, delayMs);
+      else setTimeout(() => { activeWrites--; }, 0);
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "Persistence race test", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  assert.equal(started.ok, true);
+  const active = started.state.sessions.find(item => item.id === session.id);
+
+  const completionPromise = send(worker.listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: active.activeJobId,
+    role: "CEREBRO", ok: true, text: "completion during STOP"
+  }, 11);
+
+  await completingSnapshot;
+  const stopped = await send(worker.listeners, { type: "STOP", sessionId: session.id });
+  assert.equal(stopped.ok, true);
+  await completionPromise;
+  await new Promise(resolve => setTimeout(resolve, 10));
+
+  assert.equal(maxActiveWrites, 1, "storage writes must never overlap");
+  const persisted = worker.stored.bridgeStateV5.sessions.find(item => item.id === session.id);
+  assert.equal(persisted.status, "STOPPED");
+  assert.equal(persisted.running, false);
 });
