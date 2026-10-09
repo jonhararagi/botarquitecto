@@ -520,7 +520,9 @@ test("empty response diagnosis preserves the originating role and tab", async ()
     type: "TURN_COMPLETE", sessionId: session.id, jobId: active.activeJobId,
     role: "CEREBRO", ok: true, text: "   "
   }, 11);
-  const failed = completed.state.sessions.find(item => item.id === session.id);
+  assert.equal(completed.ok, true);
+  const after = await send(listeners, { type: "GET_STATE" });
+  const failed = after.state.sessions.find(item => item.id === session.id);
   assert.equal(failed.running, false);
   assert.equal(failed.diagnostic.category, "empty-response");
   assert.equal(failed.diagnostic.role, "CEREBRO");
