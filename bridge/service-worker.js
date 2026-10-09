@@ -76,6 +76,11 @@ async function finishTurn(s, jobId, ok, role, text, error) {
   const result = String(text || "").trim();
   if (!result) return failSession(s, role + " devolvió una respuesta vacía");
   await addLog(s, role, result);
+  // STOP may arrive while the log is being persisted. Never restart the loop afterwards.
+  if (!s.running || s.stopRequested) {
+    s.status = "STOPPED";
+    return saveState();
+  }
   if (result === "TRABAJO TERMINADO") { s.running = false; s.status = "FINISHED — TRABAJO TERMINADO"; return saveState(); }
   if (result === s.lastForwarded) return failSession(s, "Respuesta duplicada detectada");
 
@@ -184,6 +189,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (["PAUSE","RESUME","STOP"].includes(message?.type)) {
       const s = getSession(String(message.sessionId || state.activeSessionId)); if (!s) throw new Error("Sesión no encontrada");
+      let cancelTurn = null;
       if (message.type === "PAUSE") { s.paused = true; if (s.running) s.status = "PAUSED — esperando terminar el turno actual"; }
       if (message.type === "RESUME") {
         s.paused = false;
@@ -193,8 +199,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await dispatchTurn(s, last.role === "CEREBRO" ? "OBRERO" : "CEREBRO", last.text);
         } else if (s.running) s.status = "RUNNING — esperando a " + s.activeRole;
       }
-      if (message.type === "STOP") { s.stopRequested = true; s.running = false; s.paused = false; s.activeJobId = null; s.activeRole = null; s.status = "STOPPED"; }
-      await saveState(); sendResponse({ ok: true, state: snapshot() }); return;
+      if (message.type === "STOP") {
+        if (s.activeJobId && s.activeRole) {
+          cancelTurn = {
+            tabId: s.activeRole === "CEREBRO" ? s.brainTabId : s.workerTabId,
+            jobId: s.activeJobId
+          };
+        }
+        s.stopRequested = true;
+        s.running = false;
+        s.paused = false;
+        s.activeJobId = null;
+        s.activeRole = null;
+        s.status = "STOPPED";
+      }
+      await saveState();
+      if (cancelTurn?.tabId != null) {
+        try {
+          await chrome.tabs.sendMessage(cancelTurn.tabId, {
+            type: "CANCEL_TURN",
+            jobId: cancelTurn.jobId
+          });
+        } catch {
+          // The session is already stopped; a closed/unresponsive tab cannot restart it.
+        }
+      }
+      sendResponse({ ok: true, state: snapshot() });
+      return;
     }
     if (message?.type === "RESET_SESSION") {
       const s = getSession(String(message.sessionId || state.activeSessionId)); if (!s) throw new Error("Sesión no encontrada");
