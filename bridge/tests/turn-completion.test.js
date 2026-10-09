@@ -404,3 +404,33 @@ test("STOP racing with START_TURN acknowledgement sends a cancellation after the
   assert.equal(finalSession.activeJobId, null);
 });
 
+test("control dashboard exposes intuitive session metrics and safe controls", () => {
+  const html = fs.readFileSync(path.join(root, "control.html"), "utf8");
+  const script = fs.readFileSync(path.join(root, "control.js"), "utf8");
+  for (const id of [
+    "metricStatus", "metricIteration", "metricRole", "metricTabs",
+    "brainSummary", "workerSummary", "progressBar", "status", "log",
+    "session", "brain", "worker", "seed", "start", "pause", "resume", "stop", "reset"
+  ]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "missing dashboard element: " + id);
+  }
+  assert.match(html, /lang="es"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.match(html, /prefers-reduced-motion/);
+  assert.match(script, /function updateDashboard\(x\)/);
+  assert.match(script, /aria-valuenow/);
+  assert.match(script, /x\.activeJobId/);
+});
+
+test("dashboard status and progress are derived from the selected session", () => {
+  const html = fs.readFileSync(path.join(root, "control.html"), "utf8");
+  const script = fs.readFileSync(path.join(root, "control.js"), "utf8");
+  assert.match(html, /id="metricStatusDetail"/);
+  assert.match(html, /id="metricStatus"/);
+  assert.match(script, /x\.status/);
+  assert.match(script, /x\.iteration/);
+  assert.match(script, /x\.maxIterations/);
+  assert.match(script, /x\.brainTabId/);
+  assert.match(script, /x\.workerTabId/);
+});
+
