@@ -7,8 +7,8 @@ const { webcrypto } = require("node:crypto");
 
 const root = path.resolve(__dirname, "..");
 
-function loadWorker() {
-  const stored = {};
+function loadWorker(initialStorage = {}) {
+  const stored = { ...initialStorage };
   const sent = [];
   const tabs = new Map([
     [11, { id: 11, url: "https://chatgpt.com/c/brain", title: "CEREBRO" }],
@@ -181,7 +181,7 @@ test("extension JavaScript parses and manifest declares an MV3 content script", 
 
 
 test("watchdog fails and cancels a persisted turn after its deadline", async () => {
-  const { listeners, sent, stored } = await readyWorker();
+  const { listeners, sent, stored, alarmState } = await readyWorker();
   const initial = await send(listeners, { type: "GET_STATE" });
   const session = initial.state.sessions[0];
 
@@ -197,7 +197,7 @@ test("watchdog fails and cancels a persisted turn after its deadline", async () 
   assert.ok(active.activeJobStartedAt);
   assert.equal(active.activeJobTimeoutMs, 5000);
   assert.ok(stored.bridgeStateV5);
-  assert.ok(alarmStateHas(stored.bridgeStateV5, session.id));
+  assert.ok(alarmState.has("bridge-turn-watchdog"));
 
   const persisted = stored.bridgeStateV5.sessions.find(item => item.id === session.id);
   persisted.activeJobStartedAt = Date.now() - 6000;
@@ -212,6 +212,30 @@ test("watchdog fails and cancels a persisted turn after its deadline", async () 
   assert.ok(sent.some(item => item.tabId === 11 && item.message.type === "CANCEL_TURN" && item.message.jobId === jobId));
 });
 
-function alarmStateHas(savedState, sessionId) {
-  return savedState.sessions.some(item => item.id === sessionId && item.activeJobId && item.activeJobStartedAt);
-}
+
+
+test("service-worker restart fails closed if completion persistence was interrupted", async () => {
+  const first = await readyWorker();
+  const initial = await send(first.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+
+  const started = await send(first.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "Restart recovery test", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  assert.equal(started.ok, true);
+  const active = started.state.sessions.find(item => item.id === session.id);
+  const persisted = JSON.parse(JSON.stringify(first.stored.bridgeStateV5));
+  const savedSession = persisted.sessions.find(item => item.id === session.id);
+  savedSession.completingJobId = active.activeJobId;
+
+  const restarted = loadWorker({ bridgeStateV5: persisted });
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const recovered = await send(restarted.listeners, { type: "GET_STATE" });
+  const sessionAfterRestart = recovered.state.sessions.find(item => item.id === session.id);
+  assert.equal(sessionAfterRestart.running, false);
+  assert.equal(sessionAfterRestart.activeJobId, null);
+  assert.match(sessionAfterRestart.status, /ERROR/);
+  assert.match(sessionAfterRestart.status, /reinició durante la confirmación/i);
+});
