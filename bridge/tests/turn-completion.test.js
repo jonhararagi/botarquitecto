@@ -503,3 +503,27 @@ test("diagnostic panel displays cause, failed role, tab and recovery guidance", 
   assert.ok(script.includes('statusValue.replace(/^ERROR\\s*[—-]\\s*/,"")'), "error prefix must use whitespace regex escapes, not literal backslashes");
   assert.match(script, /Sin incidencias registradas/);
 });
+
+
+test("empty response diagnosis preserves the originating role and tab", async () => {
+  const { listeners } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "empty response diagnosis", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  const active = started.state.sessions.find(item => item.id === session.id);
+
+  const completed = await send(listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: active.activeJobId,
+    role: "CEREBRO", ok: true, text: "   "
+  }, 11);
+  const failed = completed.state.sessions.find(item => item.id === session.id);
+  assert.equal(failed.running, false);
+  assert.equal(failed.diagnostic.category, "empty-response");
+  assert.equal(failed.diagnostic.role, "CEREBRO");
+  assert.equal(failed.diagnostic.tabId, 11);
+  assert.match(failed.diagnostic.recovery, /respuesta visible/);
+});
