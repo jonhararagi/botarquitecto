@@ -354,7 +354,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (s.running && !s.activeJobId) {
           const last = s.log.filter(x => x.role === "CEREBRO" || x.role === "OBRERO").at(-1);
           if (!last) throw new Error("No hay un turno pendiente para continuar");
-          await dispatchTurn(s, last.role === "CEREBRO" ? "OBRERO" : "CEREBRO", last.text);
+          try {
+            await dispatchTurn(s, last.role === "CEREBRO" ? "OBRERO" : "CEREBRO", last.text);
+          } catch (error) {
+            // A paused session has no active job to protect it with the watchdog.
+            // If its next tab is unavailable, fail closed instead of leaving it
+            // marked as running with no recoverable turn.
+            await failSession(s, error.message || String(error));
+          }
         } else if (s.running) s.status = "RUNNING — esperando a " + s.activeRole;
       }
       if (message.type === "STOP") {
