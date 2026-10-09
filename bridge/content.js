@@ -223,6 +223,20 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
   );
 }
 
+async function reportTurnComplete(message, result) {
+  const response = await chrome.runtime.sendMessage({
+    type: "TURN_COMPLETE",
+    sessionId: String(message.sessionId || ""),
+    jobId: String(message.jobId || ""),
+    role: message.role || "ChatGPT",
+    ...result
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "BRIDGE no confirmó la finalización del turno");
+  }
+}
+
 async function runTurn(message) {
   try {
     const text = await sendAndWait(
@@ -231,21 +245,16 @@ async function runTurn(message) {
       Number(message.minTurnDelayMs) || 0
     );
 
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: true,
-      text,
-      role: message.role || "ChatGPT"
-    });
+    await reportTurnComplete(message, { ok: true, text });
   } catch (error) {
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: false,
-      error: error.message || String(error),
-      role: message.role || "ChatGPT"
-    });
+    try {
+      await reportTurnComplete(message, {
+        ok: false,
+        error: error.message || String(error)
+      });
+    } catch (reportError) {
+      console.error("BRIDGE no pudo confirmar el resultado del turno", reportError);
+    }
   } finally {
     if (activeJobId === message.jobId) activeJobId = null;
   }
