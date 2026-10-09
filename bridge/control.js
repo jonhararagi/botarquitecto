@@ -63,7 +63,7 @@ function updateDashboard(x){
   }else if(statusValue.startsWith("ERROR")){
     diagnosticPanel.dataset.kind="error";
     diagnosticTitle.textContent="Error registrado antes del diagnóstico detallado";
-    diagnosticReason.textContent=statusValue.replace(/^ERROR\\s*[—-]\\s*/,"");
+    diagnosticReason.textContent=statusValue.replace(/^ERROR\s*[—-]\s*/,"");
     diagnosticRole.textContent="No identificado";
     diagnosticTab.textContent="No identificada";
     diagnosticRecovery.textContent="Revisa el historial de actividad, confirma que ambas pestañas ChatGPT estén abiertas y vuelve a iniciar solo después de corregir la causa.";
