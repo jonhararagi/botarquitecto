@@ -15,6 +15,7 @@ function loadWorker() {
     [22, { id: 22, url: "https://chatgpt.com/c/worker", title: "OBRERO" }]
   ]);
   const listeners = {};
+  const alarmState = new Map();
   const chrome = {
     storage: {
       local: {
@@ -34,9 +35,15 @@ function loadWorker() {
       },
       onRemoved: { addListener(fn) { listeners.onRemoved = fn; } }
     },
+    alarms: {
+      async create(name, info) { alarmState.set(name, info); },
+      async clear(name) { return alarmState.delete(name); },
+      onAlarm: { addListener(fn) { listeners.onAlarm = fn; } }
+    },
     action: { onClicked: { addListener(fn) { listeners.onClicked = fn; } } },
     runtime: {
       onMessage: { addListener(fn) { listeners.onMessage = fn; } },
+      onStartup: { addListener(fn) { listeners.onStartup = fn; } },
       getURL(file) { return "chrome-extension://test/" + file; }
     }
   };
@@ -60,7 +67,7 @@ function loadWorker() {
     clearTimeout
   }, { filename: "service-worker.js" });
 
-  return { listeners, sent, stored };
+  return { listeners, sent, stored, alarmState };
 }
 
 function send(listeners, message, tabId) {
@@ -127,6 +134,12 @@ test("TURN_COMPLETE validates the active job, role, and source tab before forwar
   }, 11);
   assert.equal(completed.ok, true);
 
+  const duplicate = await send(listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: firstJob,
+    role: "CEREBRO", ok: true, text: "CEREBRO response"
+  }, 11);
+  assert.equal(duplicate.ok, false, "a repeated completion must not advance the next turn");
+
   const after = await send(listeners, { type: "GET_STATE" });
   const updated = after.state.sessions.find(item => item.id === session.id);
   assert.equal(updated.activeRole, "OBRERO");
@@ -165,3 +178,40 @@ test("extension JavaScript parses and manifest declares an MV3 content script", 
   assert.ok(manifest.content_scripts.some(script => script.js.includes("content.js")));
   assert.ok(manifest.background.service_worker);
 });
+
+
+test("watchdog fails and cancels a persisted turn after its deadline", async () => {
+  const { listeners, sent, stored } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+
+  const started = await send(listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "Watchdog test", maxIterations: 10, brainTimeoutMs: 5000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  assert.equal(started.ok, true);
+  const active = started.state.sessions.find(item => item.id === session.id);
+  const jobId = active.activeJobId;
+  assert.ok(jobId);
+  assert.ok(active.activeJobStartedAt);
+  assert.equal(active.activeJobTimeoutMs, 5000);
+  assert.ok(stored.bridgeStateV5);
+  assert.ok(alarmStateHas(stored.bridgeStateV5, session.id));
+
+  const persisted = stored.bridgeStateV5.sessions.find(item => item.id === session.id);
+  persisted.activeJobStartedAt = Date.now() - 6000;
+  await listeners.onAlarm({ name: "bridge-turn-watchdog" });
+
+  const final = await send(listeners, { type: "GET_STATE" });
+  const failed = final.state.sessions.find(item => item.id === session.id);
+  assert.equal(failed.running, false);
+  assert.equal(failed.activeJobId, null);
+  assert.match(failed.status, /ERROR/);
+  assert.match(failed.status, /timeout/i);
+  assert.ok(sent.some(item => item.tabId === 11 && item.message.type === "CANCEL_TURN" && item.message.jobId === jobId));
+});
+
+function alarmStateHas(savedState, sessionId) {
+  return savedState.sessions.some(item => item.id === sessionId && item.activeJobId && item.activeJobStartedAt);
+}
