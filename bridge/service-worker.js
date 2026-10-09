@@ -9,7 +9,7 @@ const WATCHDOG_ALARM = "bridge-turn-watchdog";
 
 function makeId() { return "session-" + crypto.randomUUID(); }
 function createSessionModel(name = "Sesión 1") {
-  return { id: makeId(), name, brainTabId: null, workerTabId: null, status: "IDLE", paused: false, stopRequested: false, running: false, iteration: 0, maxIterations: DEFAULT_SETTINGS.maxIterations, brainTimeoutMs: DEFAULT_SETTINGS.brainTimeoutMs, workerTimeoutMs: DEFAULT_SETTINGS.workerTimeoutMs, minTurnDelayMs: DEFAULT_SETTINGS.minTurnDelayMs, lastForwarded: "", activeRole: null, activeJobId: null, activeJobStartedAt: null, activeJobTimeoutMs: null, completingJobId: null, log: [] };
+  return { id: makeId(), name, brainTabId: null, workerTabId: null, status: "IDLE", paused: false, stopRequested: false, running: false, iteration: 0, maxIterations: DEFAULT_SETTINGS.maxIterations, brainTimeoutMs: DEFAULT_SETTINGS.brainTimeoutMs, workerTimeoutMs: DEFAULT_SETTINGS.workerTimeoutMs, minTurnDelayMs: DEFAULT_SETTINGS.minTurnDelayMs, lastForwarded: "", activeRole: null, activeJobId: null, activeJobStartedAt: null, activeJobTimeoutMs: null, completingJobId: null, diagnostic: null, log: [] };
 }
 
 const DEFAULT_STATE = { version: 5, activeSessionId: null, sessions: [] };
@@ -166,7 +166,24 @@ async function dispatchTurn(s, role, text) {
   }
 }
 
+function classifyDiagnostic(message, role) {
+  const reason = String(message || "Error no especificado");
+  if (/timeout|super[oó] el timeout/i.test(reason)) return { category: "timeout", title: "Se agotó el tiempo de espera", recovery: "Comprueba que la pestaña siga abierta y que ChatGPT haya terminado de responder. Si está bloqueada, recárgala y vuelve a iniciar la sesión." };
+  if (/fue cerrada|pestaña.*cerrada/i.test(reason)) return { category: "tab-closed", title: "Se cerró una pestaña necesaria", recovery: "Abre de nuevo ChatGPT, selecciona la conversación correspondiente, actualiza las pestañas y vuelve a iniciar la sesión." };
+  if (/ya no es una pestaña ChatGPT|no tiene pestaña configurada/i.test(reason)) return { category: "tab-invalid", title: "La pestaña asignada no es válida", recovery: "Selecciona una pestaña de ChatGPT válida para ese rol y comprueba que CEREBRO y OBRERO sean pestañas distintas." };
+  if (/no responde|no pudo iniciar el turno/i.test(reason)) return { category: "tab-unresponsive", title: "La pestaña no respondió a BRIDGE", recovery: "Recarga la pestaña de ChatGPT para volver a cargar BRIDGE, espera a que termine de cargar y prueba otra vez." };
+  if (/respuesta vacía/i.test(reason)) return { category: "empty-response", title: "La respuesta recibida estaba vacía", recovery: "Comprueba si ChatGPT generó una respuesta visible. Si la conversación quedó a medio generar, recárgala y vuelve a intentarlo." };
+  if (/duplicada/i.test(reason)) return { category: "duplicate-response", title: "Se detectó una respuesta duplicada", recovery: "No se reenvió esa respuesta. Revisa el historial de ambas conversaciones y vuelve a iniciar con una instrucción que pida una salida nueva." };
+  if (/reinici[oó] durante|servicio se reinici[oó]|no se puede recuperar|no tenía un turno recuperable/i.test(reason)) return { category: "recovery", title: "BRIDGE no pudo recuperar el turno de forma segura", recovery: "La sesión se detuvo para evitar un reenvío incierto. Revisa ambas conversaciones y reinicia la sesión desde el último resultado confirmado." };
+  return { category: "error", title: "La sesión se detuvo por un error", recovery: "Revisa el motivo y la pestaña indicada. Corrige la causa y vuelve a iniciar la sesión; BRIDGE no reanuda automáticamente un turno fallido." };
+}
 async function failSession(s, message) {
+  const reason = String(message || "Error no especificado");
+  const roleMatch = reason.match(/^(CEREBRO|OBRERO)\s*[—-]/i);
+  const role = roleMatch ? roleMatch[1].toUpperCase() : s.activeRole;
+  const tabId = role === "CEREBRO" ? s.brainTabId : role === "OBRERO" ? s.workerTabId : null;
+  const details = classifyDiagnostic(reason, role);
+  s.diagnostic = { ...details, reason, role: role || null, tabId: tabId ?? null, timestamp: Date.now() };
   s.running = false; s.activeRole = null; s.activeJobId = null;
   s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null;
   s.status = "ERROR — " + message;
@@ -257,7 +274,7 @@ if (chrome.runtime.onStartup) {
 chrome.tabs.onRemoved.addListener(async tabId => {
   await hydrate();
   for (const s of state.sessions) if (s.running && (tabId === s.brainTabId || tabId === s.workerTabId)) {
-    await failSession(s, (tabId === s.brainTabId ? "CEREBRO" : "OBRERO") + " fue cerrada");
+    await failSession(s, (tabId === s.brainTabId ? "CEREBRO" : "OBRERO") + " — pestaña fue cerrada");
   }
 });
 
@@ -323,7 +340,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       s.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
       s.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
       s.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
-      s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.activeRole = null; s.activeJobId = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null; s.log = []; s.status = "STARTING";
+      s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.diagnostic = null; s.activeRole = null; s.activeJobId = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.completingJobId = null; s.log = []; s.status = "STARTING";
       state.activeSessionId = s.id; await saveState(); await addLog(s, "USUARIO", seed);
       try { await dispatchTurn(s, "CEREBRO", seed); } catch (e) { await failSession(s, e.message || String(e)); }
       sendResponse({ ok: true, state: snapshot() }); return;
@@ -341,6 +358,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         } else if (s.running) s.status = "RUNNING — esperando a " + s.activeRole;
       }
       if (message.type === "STOP") {
+        const stoppedRole = s.activeRole;
+        const stoppedTabId = stoppedRole === "CEREBRO" ? s.brainTabId : stoppedRole === "OBRERO" ? s.workerTabId : null;
+        s.diagnostic = { category: "stopped", title: "Sesión detenida manualmente", reason: "Detenida por el usuario", role: stoppedRole || null, tabId: stoppedTabId ?? null, timestamp: Date.now(), recovery: "Cuando quieras continuar, revisa la última respuesta confirmada y pulsa Activar sesión para iniciar un ciclo nuevo." };
         if (s.activeJobId && s.activeRole) {
           cancelTurn = {
             tabId: s.activeRole === "CEREBRO" ? s.brainTabId : s.workerTabId,
