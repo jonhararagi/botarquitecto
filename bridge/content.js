@@ -134,9 +134,10 @@ function insertText(element, text) {
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-async function waitForInput(timeoutMs) {
+async function waitForInput(timeoutMs, shouldCancel = () => false) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
+    if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
     const input = getInput();
     if (input) return input;
     await new Promise(r => setTimeout(r, 250));
@@ -144,9 +145,10 @@ async function waitForInput(timeoutMs) {
   throw new Error("ChatGPT input not found");
 }
 
-async function waitForSendButton(timeoutMs) {
+async function waitForSendButton(timeoutMs, shouldCancel = () => false) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
+    if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
     const button = firstVisible(SEND_SELECTORS);
     if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") return button;
     await new Promise(r => setTimeout(r, 200));
@@ -164,7 +166,7 @@ function isGenerationStopped() {
   return !firstVisible(STOP_SELECTORS);
 }
 
-async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
+async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs, shouldCancel = () => false) {
   let lastText = "";
   let stableSince = 0;
   let sawNewResponse = false;
@@ -172,6 +174,7 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   const deadline = sentAt + timeoutMs + RESPONSE_STABLE_MS;
 
   while (Date.now() < deadline) {
+    if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
     const latestNode = getLatestAssistantNode();
     const current = getAssistantText(latestNode);
     const isNewNode = latestNode && latestNode !== beforeNode;
@@ -205,14 +208,16 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   );
 }
 
-async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
-  const input = await waitForInput(10000);
+async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, shouldCancel = () => false) {
+  const input = await waitForInput(10000, shouldCancel);
+  if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
   const beforeNode = getLatestAssistantNode();
   const beforeText = getAssistantText(beforeNode);
 
   insertText(input, text);
 
-  const button = await waitForSendButton(10000);
+  const button = await waitForSendButton(10000, shouldCancel);
+  if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
   button.click();
 
   return waitForCompletedResponse(
@@ -220,7 +225,8 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
     beforeText,
     Date.now(),
     timeoutMs,
-    minTurnDelayMs
+    minTurnDelayMs,
+    shouldCancel
   );
 }
 
@@ -243,7 +249,8 @@ async function runTurn(message) {
     const text = await sendAndWait(
       message.text,
       Number(message.timeoutMs) || 60000,
-      Number(message.minTurnDelayMs) || 0
+      Number(message.minTurnDelayMs) || 0,
+      () => activeJobCancelled || activeJobId !== String(message.jobId || "")
     );
 
     if (activeJobCancelled) throw new Error("Turno cancelado por BRIDGE");
