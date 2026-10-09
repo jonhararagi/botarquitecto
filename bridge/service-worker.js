@@ -179,7 +179,7 @@ function classifyDiagnostic(message, role) {
 }
 async function failSession(s, message) {
   const reason = String(message || "Error no especificado");
-  const roleMatch = reason.match(/^(CEREBRO|OBRERO)\s*[—-]/i);
+  const roleMatch = reason.match(/^(CEREBRO|OBRERO)(?:\s*[—-]|\s+)/i);
   const role = roleMatch ? roleMatch[1].toUpperCase() : s.activeRole;
   const tabId = role === "CEREBRO" ? s.brainTabId : role === "OBRERO" ? s.workerTabId : null;
   const details = classifyDiagnostic(reason, role);
