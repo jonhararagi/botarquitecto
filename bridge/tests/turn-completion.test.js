@@ -491,5 +491,6 @@ test("diagnostic panel displays cause, failed role, tab and recovery guidance", 
   assert.match(script, /x\.diagnostic/);
   assert.match(script, /diagnostic\.tabId/);
   assert.match(script, /diagnostic\.recovery/);
+  assert.ok(script.includes('statusValue.replace(/^ERROR\\s*[—-]\\s*/,"")'), "error prefix must use whitespace regex escapes, not literal backslashes");
   assert.match(script, /Sin incidencias registradas/);
 });
