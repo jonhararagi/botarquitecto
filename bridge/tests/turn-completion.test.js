@@ -133,6 +133,13 @@ test("TURN_COMPLETE validates the active job, role, and source tab before forwar
   assert.notEqual(updated.activeJobId, firstJob);
   assert.equal(sent.at(-1).tabId, 22);
   assert.equal(sent.at(-1).message.text, "CEREBRO response");
+
+  const stopped = await send(listeners, { type: "STOP", sessionId: session.id });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.state.sessions.find(item => item.id === session.id).status, "STOPPED");
+  assert.equal(sent.at(-1).tabId, 22);
+  assert.equal(sent.at(-1).message.type, "CANCEL_TURN");
+  assert.ok(sent.at(-1).message.jobId);
 });
 
 test("content script includes session identity and checks the completion acknowledgement", () => {
@@ -140,4 +147,6 @@ test("content script includes session identity and checks the completion acknowl
   assert.match(source, /sessionId:\s*String\(message\.sessionId\s*\|\|\s*""\)/);
   assert.match(source, /if\s*\(!response\?\.ok\)/);
   assert.match(source, /reportTurnComplete\(message,\s*\{\s*ok:\s*true,\s*text\s*\}\)/);
+  assert.match(source, /message\?\.type === "CANCEL_TURN"/);
+  assert.match(source, /activeJobCancelled = true/);
 });
