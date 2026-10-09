@@ -25,5 +25,5 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Run regression tests
-        run: npm test
+        run: node --check control.js && node --check popup.js && node --check service-worker.js && node --check content.js && npm test
         working-directory: bridge
