@@ -224,6 +224,11 @@ test("startup recovery expires and cancels a persisted turn past its deadline", 
   assert.equal(failed.activeJobId, null);
   assert.match(failed.status, /ERROR/);
   assert.match(failed.status, /timeout/i);
+  assert.equal(failed.diagnostic.category, "timeout");
+  assert.equal(failed.diagnostic.role, "CEREBRO");
+  assert.equal(failed.diagnostic.tabId, 11);
+  assert.match(failed.diagnostic.recovery, /Comprueba que la pestaña siga abierta/);
+  assert.ok(failed.diagnostic.timestamp > 0);
   assert.ok(restarted.sent.some(item => item.tabId === 11 && item.message.type === "CANCEL_TURN" && item.message.jobId === jobId));
 });
 
@@ -253,6 +258,10 @@ test("service-worker restart fails closed if completion persistence was interrup
   assert.equal(sessionAfterRestart.activeJobId, null);
   assert.match(sessionAfterRestart.status, /ERROR/);
   assert.match(sessionAfterRestart.status, /reinició durante la confirmación/i);
+  assert.equal(sessionAfterRestart.diagnostic.category, "recovery");
+  assert.equal(sessionAfterRestart.diagnostic.role, "CEREBRO");
+  assert.equal(sessionAfterRestart.diagnostic.tabId, 11);
+  assert.match(sessionAfterRestart.diagnostic.recovery, /último resultado confirmado/);
 });
 
 
