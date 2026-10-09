@@ -190,7 +190,7 @@ test("extension JavaScript parses and manifest declares an MV3 content script", 
 });
 
 
-test("watchdog fails and cancels a persisted turn after its deadline", async () => {
+test("startup recovery expires and cancels a persisted turn past its deadline", async () => {
   const { listeners, sent, stored, alarmState } = await readyWorker();
   const initial = await send(listeners, { type: "GET_STATE" });
   const session = initial.state.sessions[0];
@@ -211,15 +211,17 @@ test("watchdog fails and cancels a persisted turn after its deadline", async () 
 
   const persisted = stored.bridgeStateV5.sessions.find(item => item.id === session.id);
   persisted.activeJobStartedAt = Date.now() - 6000;
-  await listeners.onAlarm({ name: "bridge-turn-watchdog" });
-
-  const final = await send(listeners, { type: "GET_STATE" });
+  // A service-worker restart reloads the persisted snapshot, then reconciles
+  // expired work against the persisted deadline instead of relying on object aliasing.
+  const restarted = loadWorker({ bridgeStateV5: stored.bridgeStateV5 });
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const final = await send(restarted.listeners, { type: "GET_STATE" });
   const failed = final.state.sessions.find(item => item.id === session.id);
   assert.equal(failed.running, false);
   assert.equal(failed.activeJobId, null);
   assert.match(failed.status, /ERROR/);
   assert.match(failed.status, /timeout/i);
-  assert.ok(sent.some(item => item.tabId === 11 && item.message.type === "CANCEL_TURN" && item.message.jobId === jobId));
+  assert.ok(restarted.sent.some(item => item.tabId === 11 && item.message.type === "CANCEL_TURN" && item.message.jobId === jobId));
 });
 
 
