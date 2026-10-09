@@ -86,3 +86,13 @@ Minimizar la ventana no detiene el Bridge. Cerrar una pestaña CEREBRO/OBRERO s�
 - Chrome/Brave pueden descartar pestañas en segundo plano.
 - ChatGPT puede cambiar su DOM; los selectores de content.js pueden necesitar mantenimiento.
 - No se convirtió en programa de escritorio porque no aporta una ventaja necesaria para este MVP.
+
+## Diagnóstico de sesión y recuperación
+
+El panel de control incluye **Diagnóstico y recuperación**. Cuando BRIDGE registra un fallo, el estado persistido de la sesión conserva una categoría, el motivo original, el rol implicado (CEREBRO u OBRERO), el ID de la pestaña, la hora y pasos sugeridos para recuperarse. El panel relaciona ese ID con el título de la pestaña si sigue detectada; si la pestaña ya no existe, muestra el ID guardado para ayudar a identificar la asignación que falló.
+
+Se distinguen, cuando el mensaje registrado lo permite, timeouts, pestañas cerradas o inválidas, pestañas que no responden, respuestas vacías o duplicadas y recuperación segura tras reinicio. Los consejos son guías basadas en el motivo observado, no una garantía de que la causa raíz haya sido confirmada externamente. Los errores desconocidos se etiquetan como genéricos en vez de inventar una explicación. Una detención manual se registra como tal.
+
+Al activar un ciclo nuevo se limpia el diagnóstico anterior. Las sesiones guardadas por versiones previas pueden no tener un diagnóstico estructurado; en ese caso el panel indica que el motivo exacto no está disponible y muestra el estado/historial que sí se conserva.
+
+La suite de regresión verifica que se persistan el rol, la pestaña y los pasos de recuperación, así como el diagnóstico de STOP y los elementos principales del panel. Sigue siendo necesaria la prueba manual en Chrome o Brave con dos conversaciones reales para validar la experiencia completa de extremo a extremo.
