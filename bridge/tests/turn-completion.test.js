@@ -36,6 +36,7 @@ function loadWorker(initialStorage = {}, options = {}) {
     tabs: {
       async query() { return [...tabs.values()]; },
       async get(id) {
+        if (options.beforeGet) await options.beforeGet(id);
         if (!tabs.has(id)) throw new Error("Tab not found");
         return tabs.get(id);
       },
@@ -300,4 +301,43 @@ test("concurrent state transitions serialize storage writes", async () => {
   const persisted = worker.stored.bridgeStateV5.sessions.find(item => item.id === session.id);
   assert.equal(persisted.status, "STOPPED");
   assert.equal(persisted.running, false);
+});
+
+
+test("STOP during tab validation does not publish or dispatch a stale job", async () => {
+  let enteredResolve;
+  let releaseResolve;
+  const enteredGet = new Promise(resolve => { enteredResolve = resolve; });
+  const releaseGet = new Promise(resolve => { releaseResolve = resolve; });
+  const worker = await readyWorker({
+    async beforeGet(id) {
+      if (id === 11) {
+        enteredResolve();
+        await releaseGet;
+      }
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const startPromise = send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "STOP while validating tab", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+
+  await enteredGet;
+  const stopped = await send(worker.listeners, { type: "STOP", sessionId: session.id });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.state.sessions.find(item => item.id === session.id).status, "STOPPED");
+
+  releaseResolve();
+  await startPromise;
+  const after = await send(worker.listeners, { type: "GET_STATE" });
+  const finalSession = after.state.sessions.find(item => item.id === session.id);
+  assert.equal(finalSession.status, "STOPPED");
+  assert.equal(finalSession.running, false);
+  assert.equal(finalSession.activeJobId, null);
+  assert.equal(finalSession.activeRole, null);
+  assert.equal(worker.sent.some(item => item.message.type === "START_TURN"), false);
 });
