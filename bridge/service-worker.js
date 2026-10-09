@@ -150,6 +150,17 @@ async function dispatchTurn(s, role, text) {
   try {
     const response = await chrome.tabs.sendMessage(tabId, { type: "START_TURN", jobId, text, timeoutMs, minTurnDelayMs: s.minTurnDelayMs, role, sessionId: s.id });
     if (!response?.ok) throw new Error(response?.error || role + " no pudo iniciar el turno");
+
+    // STOP can race with the asynchronous START_TURN acknowledgement. If the
+    // tab received the start after STOP already cancelled the job, cancel it
+    // again after the acknowledgement so a late message cannot keep running.
+    if (!s.running || s.stopRequested || s.activeJobId !== jobId) {
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: "CANCEL_TURN", jobId });
+      } catch {
+        // The session is already stopped; a closed tab cannot restart it.
+      }
+    }
   } catch (error) {
     throw new Error(role + " no responde. Recarga esa pestaña ChatGPT para cargar BRIDGE. " + (error?.message || ""));
   }
