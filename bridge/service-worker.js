@@ -122,6 +122,10 @@ async function dispatchTurn(s, role, text) {
   const timeoutMs = role === "CEREBRO" ? s.brainTimeoutMs : s.workerTimeoutMs;
   const jobId = crypto.randomUUID();
   await ensureTabAlive(tabId, role);
+  // STOP may arrive while ensureTabAlive awaits chrome.tabs.get(). Recheck
+  // before publishing a new active job, otherwise STOP can leave a stale job
+  // in persisted state even though no START_TURN was dispatched.
+  if (!s.running || s.stopRequested) return;
   s.activeRole = role; s.activeJobId = jobId; s.activeJobStartedAt = Date.now(); s.activeJobTimeoutMs = timeoutMs; s.completingJobId = null;
   s.status = "RUNNING — " + s.name + " — " + role;
   await saveState();
