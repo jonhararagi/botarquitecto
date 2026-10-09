@@ -18,6 +18,12 @@ Una extensión instalada en un perfil no puede controlar directamente las pesta�
 
 En un mismo perfil puedes crear múltiples sesiones. Para otro perfil de Chrome o Brave, instala BRIDGE allí también.
 
+## Panel informativo
+
+El panel `control.html` incluye un resumen en vivo con estado de la sesión, iteraciones completadas frente al límite, rol/turno activo, identificador abreviado del job y cantidad de pestañas ChatGPT detectadas. También muestra los títulos asignados a CEREBRO y OBRERO, una barra de progreso, el historial de actividad y controles agrupados para activar, pausar, continuar, detener o limpiar la sesión.
+
+El panel se actualiza automáticamente mientras la extensión está abierta. Los indicadores describen el estado que BRIDGE tiene guardado; no sustituyen la verificación visual de que ChatGPT esté respondiendo correctamente en las dos pestañas.
+
 ## Apertura de la interfaz
 
 El botón de BRIDGE abre `control.html` como una pestaña normal de la extensión. Si ya existe una pestaña de control, la enfoca en lugar de crear otra ventana popup. Esto evita depender del comportamiento de ventanas popup y hace que la interfaz sea consistente en Brave y Chrome, incluso con varias ventanas del navegador abiertas.
