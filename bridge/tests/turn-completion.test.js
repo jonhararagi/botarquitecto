@@ -434,3 +434,62 @@ test("dashboard status and progress are derived from the selected session", () =
   assert.match(script, /x\.workerTabId/);
 });
 
+
+
+test("failed session stores a role, tab and actionable recovery diagnosis", async () => {
+  const { listeners } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+
+  const result = await send(listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 999, workerTabId: 22,
+    seed: "diagnostic test", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+
+  assert.equal(result.ok, true);
+  const failed = result.state.sessions.find(item => item.id === session.id);
+  assert.equal(failed.running, false);
+  assert.equal(failed.diagnostic.category, "tab-closed");
+  assert.equal(failed.diagnostic.role, "CEREBRO");
+  assert.equal(failed.diagnostic.tabId, 999);
+  assert.match(failed.diagnostic.reason, /CEREBRO fue cerrada/);
+  assert.match(failed.diagnostic.recovery, /Abre de nuevo ChatGPT/);
+  assert.ok(failed.diagnostic.timestamp > 0);
+});
+
+test("manual STOP records that the user stopped the session and the active role", async () => {
+  const { listeners } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "manual stop diagnostic", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  const active = started.state.sessions.find(item => item.id === session.id);
+  assert.equal(active.activeRole, "CEREBRO");
+
+  const stopped = await send(listeners, { type: "STOP", sessionId: session.id });
+  const finalSession = stopped.state.sessions.find(item => item.id === session.id);
+  assert.equal(finalSession.diagnostic.category, "stopped");
+  assert.equal(finalSession.diagnostic.role, "CEREBRO");
+  assert.equal(finalSession.diagnostic.tabId, 11);
+  assert.match(finalSession.diagnostic.reason, /usuario/i);
+});
+
+test("diagnostic panel displays cause, failed role, tab and recovery guidance", () => {
+  const html = fs.readFileSync(path.join(root, "control.html"), "utf8");
+  const script = fs.readFileSync(path.join(root, "control.js"), "utf8");
+  for (const id of [
+    "diagnosticPanel", "diagnosticTitle", "diagnosticReason", "diagnosticRole",
+    "diagnosticTab", "diagnosticRecovery", "diagnosticTime"
+  ]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "missing diagnostic element: " + id);
+  }
+  assert.match(html, /Diagnóstico y recuperación/);
+  assert.match(script, /x\.diagnostic/);
+  assert.match(script, /diagnostic\.tabId/);
+  assert.match(script, /diagnostic\.recovery/);
+  assert.match(script, /Sin incidencias registradas/);
+});
