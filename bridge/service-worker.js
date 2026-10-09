@@ -91,8 +91,12 @@ async function finishTurn(s, jobId, ok, role, text, error) {
 }
 
 async function createSession(name) {
-  const s = createSessionObject(name);
-  state.sessions.push(s); state.activeSessionId = s.id; await saveState(); return s;
+  const normalizedName = String(name || "").trim() || "Sesión " + (state.sessions.length + 1);
+  const s = createSessionModel(normalizedName);
+  state.sessions.push(s);
+  state.activeSessionId = s.id;
+  await saveState();
+  return s;
 }
 async function removeSession(id) {
   const s = getSession(id);
@@ -201,10 +205,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message?.type === "GET_STATE") { sendResponse({ ok: true, state: snapshot() }); return; }
     if (message?.type === "TURN_COMPLETE") {
-      const s = getSession(String(message.sessionId || ""));
-      if (!s || (sender.tab?.id !== s.brainTabId && sender.tab?.id !== s.workerTabId)) { sendResponse({ ok: false, error: "Pestaña no autorizada" }); return; }
-      await finishTurn(s, String(message.jobId || ""), Boolean(message.ok), String(message.role || s.activeRole || "ChatGPT"), message.text, message.error);
-      sendResponse({ ok: true }); return;
+      const sessionId = String(message.sessionId || "");
+      const jobId = String(message.jobId || "");
+      const role = String(message.role || "");
+      const s = getSession(sessionId);
+
+      if (!s) {
+        sendResponse({ ok: false, error: "Sesión no encontrada para finalizar el turno" });
+        return;
+      }
+
+      const senderTabId = sender.tab?.id;
+      if (senderTabId !== s.brainTabId && senderTabId !== s.workerTabId) {
+        sendResponse({ ok: false, error: "Pestaña no autorizada para esta sesión" });
+        return;
+      }
+
+      // A late completion from a stopped/replaced turn must never advance the loop.
+      if (!s.running || s.stopRequested || !s.activeJobId) {
+        sendResponse({ ok: true, ignored: true });
+        return;
+      }
+
+      const expectedTabId = s.activeRole === "CEREBRO" ? s.brainTabId
+        : s.activeRole === "OBRERO" ? s.workerTabId
+        : null;
+
+      if (jobId !== s.activeJobId || role !== s.activeRole || senderTabId !== expectedTabId) {
+        sendResponse({ ok: false, error: "Finalización de turno obsoleta o no coincidente" });
+        return;
+      }
+
+      await finishTurn(s, jobId, Boolean(message.ok), role, message.text, message.error);
+      sendResponse({ ok: true });
+      return;
     }
     if (message?.type === "BRIDGE_CONTENT_READY") { sendResponse({ ok: true, tabId: sender.tab?.id ?? null }); return; }
     throw new Error("Mensaje BRIDGE desconocido");
