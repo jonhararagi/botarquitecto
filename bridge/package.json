@@ -1,0 +1,12 @@
+{
+  "name": "botarquitecto-bridge",
+  "private": true,
+  "version": "0.8.1",
+  "description": "Regression tests for the BRIDGE browser extension",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
