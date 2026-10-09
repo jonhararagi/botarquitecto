@@ -149,4 +149,7 @@ test("content script includes session identity and checks the completion acknowl
   assert.match(source, /reportTurnComplete\(message,\s*\{\s*ok:\s*true,\s*text\s*\}\)/);
   assert.match(source, /message\?\.type === "CANCEL_TURN"/);
   assert.match(source, /activeJobCancelled = true/);
+  assert.match(source, /async function waitForInput\(timeoutMs, shouldCancel = \(\) => false\)/);
+  assert.match(source, /async function waitForCompletedResponse\([^\n]+shouldCancel = \(\) => false\)/);
+  assert.match(source, /if \(shouldCancel\(\)\) throw new Error\("Turno cancelado por BRIDGE"\)/);
 });
