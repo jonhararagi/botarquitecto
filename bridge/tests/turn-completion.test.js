@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 function loadWorker(initialStorage = {}, options = {}) {
   const stored = { ...initialStorage };
   const sent = [];
+  let storageGetCalls = 0;
   const tabs = new Map([
     [11, { id: 11, url: "https://chatgpt.com/c/brain", title: "CEREBRO" }],
     [22, { id: 22, url: "https://chatgpt.com/c/worker", title: "OBRERO" }]
@@ -19,7 +20,7 @@ function loadWorker(initialStorage = {}, options = {}) {
   const chrome = {
     storage: {
       local: {
-        async get(key) { return { [key]: stored[key] }; },
+        async get(key) { storageGetCalls++; return { [key]: stored[key] }; },
         async set(value) {
           const snapshot = options.cloneWrites ? structuredClone(value) : value;
           const cleanup = options.onSet?.(snapshot);
@@ -78,7 +79,7 @@ function loadWorker(initialStorage = {}, options = {}) {
     clearTimeout
   }, { filename: "service-worker.js" });
 
-  return { listeners, sent, stored, alarmState };
+  return { listeners, sent, stored, alarmState, get storageGetCalls() { return storageGetCalls; } };
 }
 
 function send(listeners, message, tabId) {
@@ -340,4 +341,20 @@ test("STOP during tab validation does not publish or dispatch a stale job", asyn
   assert.equal(finalSession.activeJobId, null);
   assert.equal(finalSession.activeRole, null);
   assert.equal(worker.sent.some(item => item.message.type === "START_TURN"), false);
+});
+
+
+test("concurrent cold-start messages share one state hydration", async () => {
+  const worker = loadWorker();
+  const [first, second] = await Promise.all([
+    send(worker.listeners, { type: "GET_STATE" }),
+    send(worker.listeners, { type: "GET_STATE" })
+  ]);
+
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(worker.storageGetCalls, 1, "parallel messages must share one storage read");
+  assert.equal(first.state.sessions.length, 1);
+  assert.equal(second.state.sessions.length, 1);
+  assert.equal(first.state.sessions[0].id, second.state.sessions[0].id);
 });
