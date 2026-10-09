@@ -5,10 +5,11 @@ const CHATGPT_PATTERNS = [
 
 const STORAGE_KEY = "bridgeStateV5";
 const DEFAULT_SETTINGS = { brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0, maxIterations: 10 };
+const WATCHDOG_ALARM = "bridge-turn-watchdog";
 
 function makeId() { return "session-" + crypto.randomUUID(); }
 function createSessionModel(name = "Sesión 1") {
-  return { id: makeId(), name, brainTabId: null, workerTabId: null, status: "IDLE", paused: false, stopRequested: false, running: false, iteration: 0, maxIterations: DEFAULT_SETTINGS.maxIterations, brainTimeoutMs: DEFAULT_SETTINGS.brainTimeoutMs, workerTimeoutMs: DEFAULT_SETTINGS.workerTimeoutMs, minTurnDelayMs: DEFAULT_SETTINGS.minTurnDelayMs, lastForwarded: "", activeRole: null, activeJobId: null, log: [] };
+  return { id: makeId(), name, brainTabId: null, workerTabId: null, status: "IDLE", paused: false, stopRequested: false, running: false, iteration: 0, maxIterations: DEFAULT_SETTINGS.maxIterations, brainTimeoutMs: DEFAULT_SETTINGS.brainTimeoutMs, workerTimeoutMs: DEFAULT_SETTINGS.workerTimeoutMs, minTurnDelayMs: DEFAULT_SETTINGS.minTurnDelayMs, lastForwarded: "", activeRole: null, activeJobId: null, activeJobStartedAt: null, activeJobTimeoutMs: null, log: [] };
 }
 
 const DEFAULT_STATE = { version: 5, activeSessionId: null, sessions: [] };
@@ -28,8 +29,62 @@ async function hydrate() {
   if (!state.activeSessionId || !state.sessions.some(s => s.id === state.activeSessionId)) state.activeSessionId = state.sessions[0].id;
   hydrated = true;
   await saveState();
+  await reconcileRunningSessions();
 }
 async function saveState() { await chrome.storage.local.set({ [STORAGE_KEY]: state }); }
+
+async function updateWatchdogAlarm() {
+  if (!chrome.alarms) return;
+  const hasActiveTurn = state.sessions.some(s => s.running && s.activeJobId);
+  try {
+    if (hasActiveTurn) {
+      // MV3 alarms have a 30-second minimum interval in current Chromium releases.
+      await chrome.alarms.create(WATCHDOG_ALARM, { delayInMinutes: 0.5, periodInMinutes: 0.5 });
+    } else {
+      await chrome.alarms.clear(WATCHDOG_ALARM);
+    }
+  } catch (error) {
+    console.error("BRIDGE no pudo actualizar el watchdog", error);
+  }
+}
+
+async function expireActiveTurn(s, reason) {
+  const role = s.activeRole;
+  const jobId = s.activeJobId;
+  const tabId = role === "CEREBRO" ? s.brainTabId : role === "OBRERO" ? s.workerTabId : null;
+  await failSession(s, reason);
+  if (tabId != null && jobId) {
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: "CANCEL_TURN", jobId });
+    } catch {
+      // The session is already failed; an unavailable tab cannot restart it.
+    }
+  }
+}
+
+async function checkActiveTurnDeadlines() {
+  const now = Date.now();
+  for (const s of [...state.sessions]) {
+    if (!s.running || !s.activeJobId) continue;
+    const startedAt = Number(s.activeJobStartedAt) || 0;
+    const timeoutMs = Number(s.activeJobTimeoutMs) || 0;
+    if (!startedAt || !timeoutMs) {
+      await expireActiveTurn(s, "No se puede recuperar el turno activo: faltan datos de timeout persistidos");
+    } else if (now - startedAt >= timeoutMs) {
+      await expireActiveTurn(s, s.activeRole + " superó el timeout de " + Math.round(timeoutMs / 1000) + " segundos");
+    }
+  }
+  await updateWatchdogAlarm();
+}
+
+async function reconcileRunningSessions() {
+  for (const s of [...state.sessions]) {
+    if (s.running && (!s.activeJobId || !s.activeRole)) {
+      await failSession(s, "Recuperación segura: la sesión figuraba activa pero no tenía un turno recuperable");
+    }
+  }
+  await checkActiveTurnDeadlines();
+}
 function getSession(id) { return state.sessions.find(s => s.id === id) || null; }
 function snapshot() { return { version: state.version, activeSessionId: state.activeSessionId, sessions: state.sessions.map(s => ({ ...s, log: [...s.log] })) }; }
 async function addLog(s, role, text) {
@@ -54,8 +109,13 @@ async function dispatchTurn(s, role, text) {
   const timeoutMs = role === "CEREBRO" ? s.brainTimeoutMs : s.workerTimeoutMs;
   const jobId = crypto.randomUUID();
   await ensureTabAlive(tabId, role);
-  s.activeRole = role; s.activeJobId = jobId; s.status = "RUNNING — " + s.name + " — " + role;
-  await saveState(); await addLog(s, "BRIDGE", "Enviando a " + role + "...");
+  s.activeRole = role; s.activeJobId = jobId; s.activeJobStartedAt = Date.now(); s.activeJobTimeoutMs = timeoutMs;
+  s.status = "RUNNING — " + s.name + " — " + role;
+  await saveState();
+  await updateWatchdogAlarm();
+  await addLog(s, "BRIDGE", "Enviando a " + role + "...");
+  // STOP or another state transition may occur while persistence is pending.
+  if (!s.running || s.stopRequested || s.activeJobId !== jobId) return;
   try {
     const response = await chrome.tabs.sendMessage(tabId, { type: "START_TURN", jobId, text, timeoutMs, minTurnDelayMs: s.minTurnDelayMs, role, sessionId: s.id });
     if (!response?.ok) throw new Error(response?.error || role + " no pudo iniciar el turno");
@@ -65,13 +125,18 @@ async function dispatchTurn(s, role, text) {
 }
 
 async function failSession(s, message) {
-  s.running = false; s.activeRole = null; s.activeJobId = null; s.status = "ERROR — " + message;
-  await addLog(s, "BRIDGE", "ERROR — " + message); await saveState();
+  s.running = false; s.activeRole = null; s.activeJobId = null;
+  s.activeJobStartedAt = null; s.activeJobTimeoutMs = null;
+  s.status = "ERROR — " + message;
+  await addLog(s, "BRIDGE", "ERROR — " + message);
+  await saveState();
+  await updateWatchdogAlarm();
 }
 
 async function finishTurn(s, jobId, ok, role, text, error) {
   if (!s.running || s.stopRequested || jobId !== s.activeJobId) return;
-  s.activeJobId = null; s.activeRole = null;
+  s.activeJobId = null; s.activeRole = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null;
+  await updateWatchdogAlarm();
   if (!ok) return failSession(s, role + " — " + (error || "error desconocido"));
   const result = String(text || "").trim();
   if (!result) return failSession(s, role + " devolvió una respuesta vacía");
@@ -111,6 +176,21 @@ async function removeSession(id) {
   state.sessions = state.sessions.filter(x => x.id !== id);
   if (state.activeSessionId === id) state.activeSessionId = state.sessions[0].id;
   await saveState();
+}
+
+if (chrome.alarms?.onAlarm) {
+  chrome.alarms.onAlarm.addListener(async alarm => {
+    if (alarm?.name !== WATCHDOG_ALARM) return;
+    await hydrate();
+    await checkActiveTurnDeadlines();
+  });
+}
+
+if (chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(async () => {
+    await hydrate();
+    await checkActiveTurnDeadlines();
+  });
 }
 
 chrome.tabs.onRemoved.addListener(async tabId => {
@@ -182,7 +262,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       s.brainTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.brainTimeoutMs) || 60000));
       s.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
       s.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
-      s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.activeRole = null; s.activeJobId = null; s.log = []; s.status = "STARTING";
+      s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.activeRole = null; s.activeJobId = null; s.activeJobStartedAt = null; s.activeJobTimeoutMs = null; s.log = []; s.status = "STARTING";
       state.activeSessionId = s.id; await saveState(); await addLog(s, "USUARIO", seed);
       try { await dispatchTurn(s, "CEREBRO", seed); } catch (e) { await failSession(s, e.message || String(e)); }
       sendResponse({ ok: true, state: snapshot() }); return;
@@ -211,9 +291,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         s.paused = false;
         s.activeJobId = null;
         s.activeRole = null;
+        s.activeJobStartedAt = null;
+        s.activeJobTimeoutMs = null;
         s.status = "STOPPED";
       }
       await saveState();
+      await updateWatchdogAlarm();
       if (cancelTurn?.tabId != null) {
         try {
           await chrome.tabs.sendMessage(cancelTurn.tabId, {
