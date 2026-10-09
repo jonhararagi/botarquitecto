@@ -31,7 +31,18 @@ async function hydrate() {
   await saveState();
   await reconcileRunningSessions();
 }
-async function saveState() { await chrome.storage.local.set({ [STORAGE_KEY]: state }); }
+// Serialize persistence writes so a slower, older storage operation cannot
+// overwrite a newer transition (for example STOP racing with TURN_COMPLETE).
+let saveQueue = Promise.resolve();
+async function saveState() {
+  // Capture this transition now; never serialize the mutable live object later.
+  const snapshot = structuredClone(state);
+  const pending = saveQueue.catch(() => {}).then(() =>
+    chrome.storage.local.set({ [STORAGE_KEY]: snapshot })
+  );
+  saveQueue = pending;
+  await pending;
+}
 
 async function updateWatchdogAlarm() {
   if (!chrome.alarms) return;
