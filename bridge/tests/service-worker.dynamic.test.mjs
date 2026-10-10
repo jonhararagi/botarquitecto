@@ -270,7 +270,7 @@ test("rechaza remitente no autorizado y descarta job antiguo o de otra sesión",
   assert.equal(stale.ok, true);
   assert.equal((await h.state()).sessions.find(x => x.id === id).iteration, 0);
   const wrongSession = await h.call({ type: "TURN_COMPLETE", sessionId: other, jobId: s.activeJobId, role: "CEREBRO", text: "no" }, { tab: { id: 11 } });
-  assert.equal(wrongSession.ok, true);
+  assert.equal(wrongSession.ok, false, "una sesión distinta no debe aceptar la pestaña de la sesión original");
   assert.equal((await h.state()).sessions.find(x => x.id === id).iteration, 0);
   assert.equal(h.sent.length, count);
 });
@@ -404,4 +404,36 @@ test("STOP, PAUSE y RESUME repetidos conservan invariantes de estado", async () 
   assert.equal(s.activeJobId, null);
   assert.equal(s.activeRole, null);
   assert.equal(s.status, "STOPPED");
+});
+
+test("no permite eliminar una sesión activa ni iniciar dos veces la misma sesión", async () => {
+  const h = await newHarness();
+  const id = (await h.state()).sessions[0].id;
+  await start(h, id);
+  const deletion = await h.call({ type: "DELETE_SESSION", sessionId: id });
+  assert.equal(deletion.ok, false);
+  assert.match(deletion.error, /Detén la sesión/);
+  const duplicateStart = await start(h, id);
+  assert.equal(duplicateStart.ok, false);
+  assert.match(duplicateStart.error, /ya está activa/);
+  const s = (await h.state()).sessions[0];
+  assert.equal(s.running, true);
+  assert.ok(s.activeJobId);
+});
+
+test("la respuesta del turno anterior se descarta después de iniciar un turno nuevo", async () => {
+  const h = await newHarness();
+  const id = (await h.state()).sessions[0].id;
+  await start(h, id);
+  const first = (await h.state()).sessions[0];
+  const oldJob = first.activeJobId;
+  await complete(h, first, { jobId: oldJob, text: "respuesta uno" });
+  const second = (await h.state()).sessions[0];
+  assert.notEqual(second.activeJobId, oldJob);
+  const sentBefore = h.sent.length;
+  await complete(h, second, { jobId: oldJob, role: "CEREBRO", senderTab: 11, text: "respuesta tardía vieja" });
+  const after = (await h.state()).sessions[0];
+  assert.equal(after.activeJobId, second.activeJobId);
+  assert.equal(after.iteration, 1);
+  assert.equal(h.sent.length, sentBefore);
 });
