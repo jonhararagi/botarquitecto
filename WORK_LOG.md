@@ -213,3 +213,16 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **GitHub Actions:** [run 38056070845](https://github.com/jonhararagi/botarquitecto/actions/runs/38056070845), conclusión `success` sobre ese SHA exacto.
 - Pasaron sintaxis JavaScript, contratos estáticos, pruebas dinámicas del service worker, timeout del content script y test integrado content script + service worker.
 - No se ejecutaron comandos Node localmente mediante esta sesión. La validación Chrome/Brave real sigue `NOT RUN`; no declarar producción lista.
+
+
+## 2026-10-10 — BRIDGE-010 · corrección del handoff de respuesta y del campo Iteraciones
+
+- **HEAD BEFORE:** `100ae19607f7f7ed4e790ebb6231ba3b598038f8`.
+- **Commit de implementación:** `bd2afa070f76c105c2ed50e0f9f28dc21cffbd5f`.
+- **Archivos:** `bridge/content.js`, `bridge/control.js`, `bridge/tests/turn-completion.integration.test.mjs`, `bridge/tests/validation.test.mjs`, nuevo `bridge/tests/control.iterations.test.mjs`, `.github/workflows/bridge-validation.yml`.
+- **Defecto del content script:** la detección del turno terminado se bloqueaba conceptualmente en selectores de botón de copiar que cambian entre versiones de ChatGPT, pese a que el texto del turno nuevo y estable ya estaba disponible. El contenido ahora se obtiene directamente del nodo assistant exacto y no exige ese botón como precondición.
+- **Defecto del panel:** el refresco de estado periódico podía sobrescribir una edición de Iteraciones antes de que quedara guardada. El panel ahora protege el borrador, guarda la configuración y sincroniza el campo con el valor persistido. La nueva prueba dinámica verifica que el valor `2` no se cambie por `10` durante el polling ni al invocar `START_LOOP`.
+- **Pruebas de regresión:** la prueba integrada del content script/service worker ya no simula un botón de copiar y exige que se entregue `respuesta integrada` correctamente. Se actualizó el contrato estático para prohibir que la dependencia vuelva a introducirse. La CI incluye la nueva suite del panel.
+- **Evidencia CI para el commit de código:** [run 38061367991](https://github.com/jonhararagi/botarquitecto/actions/runs/38061367991), `success`, SHA exacto `bd2afa070f76c105c2ed50e0f9f28dc21cffbd5f`. Syntax, static contracts, dynamic service-worker tests, content timeout, UI iteration regression and integrated turn-completion test all passed.
+- **Chrome/Brave real:** `NOT_RUN`. Aún debe ejecutarse la prueba manual con el perfil local; no se afirma que el handoff real ya esté validado. No se creó ni integró un cambio en `main`; PR #6 continúa abierto.
+- **TIMER:** parche y pruebas automatizadas completados, aprox. 1–2 h de trabajo técnico. Restan 10–20 min para sincronizar la copia local y 15–30 min para la validación manual de Chrome, sujeto a la disponibilidad actual del DOM de ChatGPT.

@@ -176,3 +176,14 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **GitHub Actions:** [run 38056070845](https://github.com/jonhararagi/botarquitecto/actions/runs/38056070845), conclusión `success` sobre ese SHA exacto.
 - Pasaron sintaxis JavaScript, contratos estáticos, pruebas dinámicas del service worker, timeout del content script y test integrado content script + service worker.
 - No se ejecutaron comandos Node localmente mediante esta sesión. La validación Chrome/Brave real sigue `NOT RUN`; no declarar producción lista.
+
+
+## 2026-10-10 — BRIDGE-010: corrección del handoff y de iteraciones
+
+- **HEAD de código verificado:** `bd2afa070f76c105c2ed50e0f9f28dc21cffbd5f`.
+- **CI:** [GitHub Actions run 38061367991](https://github.com/jonhararagi/botarquitecto/actions/runs/38061367991), conclusión `success` sobre ese SHA exacto.
+- El content script ya no condiciona la entrega al worker a que exista un botón de “Copiar respuesta” de ChatGPT. Lee el texto del mismo turno assistant nuevo y estable, elimina el marcador interno y comprueba que ese nodo siga siendo el turno más reciente.
+- El panel conserva la edición de `Iteraciones` durante el polling; al guardar, reconcilia el campo con el valor persistido. Se agregó prueba dinámica para comprobar que `2` sobreviva una actualización de estado y llegue sin alteraciones a `START_LOOP`.
+- La prueba integrada ahora ejecuta el content script real con un DOM simulado **sin botón de copiar**, y verifica que informe correctamente el texto. Sintaxis, contratos estáticos, pruebas dinámicas del worker, timeout e integración pasaron.
+- **Validación Chrome/Brave real:** `NOT_RUN` tras el parche. La confirmación de funcionamiento en el perfil de usuario sigue pendiente; CI no demuestra por sí sola compatibilidad con el DOM actual de ChatGPT.
+- **Siguiente tarea única:** actualizar la copia local con el commit revisado y repetir una prueba manual controlada en Chrome. No fusionar PR #6 ni cambiar `main` como parte de esta tarea.
