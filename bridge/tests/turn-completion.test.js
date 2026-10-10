@@ -645,3 +645,45 @@ test("empty response diagnosis preserves the originating role and tab", async ()
   assert.equal(failed.diagnostic.tabId, 11);
   assert.match(failed.diagnostic.recovery, /respuesta visible/);
 });
+
+
+test("STOP during tab validation preserves STOPPED when validation rejects late", async () => {
+  let enteredResolve;
+  let releaseResolve;
+  const enteredGet = new Promise(resolve => { enteredResolve = resolve; });
+  const releaseGet = new Promise(resolve => { releaseResolve = resolve; });
+  const worker = await readyWorker({
+    async beforeGet(id) {
+      if (id === 11) {
+        enteredResolve();
+        await releaseGet;
+        throw new Error("Tab not found after STOP");
+      }
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const startPromise = send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "STOP before tab validation rejects", maxIterations: 10,
+    brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+
+  await enteredGet;
+  const stopped = await send(worker.listeners, { type: "STOP", sessionId: session.id });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.state.sessions.find(item => item.id === session.id).status, "STOPPED");
+
+  releaseResolve();
+  const startResult = await startPromise;
+  assert.equal(startResult.ok, true);
+
+  const finalState = await send(worker.listeners, { type: "GET_STATE" });
+  const finalSession = finalState.state.sessions.find(item => item.id === session.id);
+  assert.equal(finalSession.status, "STOPPED");
+  assert.equal(finalSession.running, false);
+  assert.equal(finalSession.activeJobId, null);
+  assert.equal(finalSession.activeRole, null);
+  assert.equal(worker.sent.some(item => item.message.type === "START_TURN"), false);
+});
