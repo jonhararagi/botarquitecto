@@ -149,6 +149,7 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
     [{ type: "TURN_COMPLETE", sessionId: "no-existe", jobId: report.jobId, role: "CEREBRO", ok: true, text: "sesión falsa" }, 11],
     [{ type: "TURN_COMPLETE", sessionId: h.sessionId, jobId: "job-antiguo", role: "CEREBRO", ok: true, text: "antiguo" }, 11],
     [{ type: "TURN_COMPLETE", sessionId: h.sessionId, jobId: report.jobId, role: "OBRERO", ok: true, text: "rol incorrecto" }, 22],
+    [{ type: "TURN_COMPLETE", sessionId: h.sessionId, jobId: report.jobId, role: "CEREBRO", ok: true, text: "rol válido desde pestaña incorrecta" }, 22],
     [{ type: "TURN_COMPLETE", sessionId: h.sessionId, jobId: report.jobId, role: "CEREBRO", ok: "true", text: "ok no booleano" }, 11]
   ];
   for (const [message, tabId] of invalid) assert.equal((await h.call(message, { tab: { id: tabId } })).ok, false);
@@ -164,6 +165,8 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   const failed = failedContent.messages.find(m => m.type === "TURN_COMPLETE");
   assert.ok(failed);
   assert.equal(failed.sessionId, bad.sessionId);
+  assert.equal(typeof failed.jobId, "string");
+  assert.ok(failed.jobId.length > 0, "el error conserva el jobId original");
   assert.equal(failed.role, "CEREBRO");
   assert.equal(failed.ok, false);
   assert.match(failed.error, /DOM integrado controlado/);
