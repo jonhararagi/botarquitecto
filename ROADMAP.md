@@ -104,3 +104,21 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 
 - [x] CI completada en el SHA `c7772931d5152da0922765f552cafcbff4761802`: [run 38036355246](https://github.com/jonhararagi/botarquitecto/actions/runs/38036355246), `success`.
 - [ ] Ejecutar y documentar la validación real de Chrome/Brave; la CI verde no la reemplaza.
+
+
+## BRIDGE-005 — auditoría de STOP y diseño de cancelación cooperativa
+
+- [x] Reinspeccionar HEAD de rama, base `main` y estado del PR #6 antes de documentar.
+- [x] Inspeccionar worker, content script, controles, popup, pruebas y workflow.
+- [x] Documentar flujo de START/PAUSE/RESUME/STOP/timeout/TURN_COMPLETE y fallos de mensajería.
+- [x] Diseñar identidad de cancelación, validación después de awaits, respuesta tardía, fallo de cancelación y recuperación MV3 conservadora.
+- [x] Documentar tabla de transiciones y 11 escenarios de prueba, indicando Node/mocks, Chromium real o ambos.
+- [ ] Añadir y ejecutar tests deterministas de intercalado STOP con `dispatchTurn()` y `finishTurn()`.
+- [ ] Evaluar en Chrome/Brave real el envío de cancelación, polling y ciclo de vida natural MV3.
+- [ ] No implementar cancelación en producción hasta tener los tests deterministas y una decisión de alcance separada.
+
+**Documento:** `docs/qa/BRIDGE-005-STOP-CANCELLATION-DESIGN.md`.  
+**Evidencia:** `PASS_STATIC` para inspección de fuentes; `NOT_RUN` para pruebas nuevas y Chromium real. CI histórica del SHA de entrada no valida cambios documentales posteriores.  
+**Estado:** `PARTIAL / DESIGN_ONLY`; no producción.  
+**Siguiente tarea única:** pruebas deterministas de intercalado STOP/dispatchTurn/finishTurn.  
+**TIMER:** auditoría/documentación estimada 2–4 h, confianza media; implementación posterior 2–6 h si se autoriza, confianza baja; estabilización BRIDGE 3–7 días, confianza baja.
