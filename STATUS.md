@@ -101,3 +101,16 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Estado:** `PARTIAL / DESIGN_ONLY`, no producción.
 - **Siguiente tarea única:** añadir pruebas deterministas de intercalado STOP/dispatchTurn/finishTurn, sin cambiar producción.
 - **TIMER:** auditoría/documentación 2–4 h estimadas, confianza media; implementación posterior 2–6 h estimadas si se autoriza, confianza baja; estabilización BRIDGE 3–7 días, confianza baja. Tiempo medido no disponible.
+
+
+## BRIDGE-006 — intercalados deterministas STOP/dispatchTurn/finishTurn
+
+- **Entrada:** rama `worker/bridge-001-validation`, HEAD declarado/verificado al iniciar `b0711cbb2d19a5ab706c04f1f718ff1784b584c9`; `main` `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR #6 abierto y sin merge.
+- **Cambios:** `bridge/service-worker.js` usa un token de ejecución en memoria, invalida la autoridad al recibir STOP, comprueba la identidad después de awaits y antes de efectos externos, y evita que una escritura de storage obsoleta quede como snapshot final. No se añaden campos persistentes ni protocolo de cancelación.
+- **Tests añadidos en `bridge/tests/service-worker.dynamic.test.mjs`:** A, STOP durante `tabs.get()` y excepción tardía; B, STOP durante persistencia en `finishTurn()`; C, START B antes de liberar la espera de A (ABA), respuesta antigua de A y conservación del job B. Barreras con promesas diferidas, sin temporizadores arbitrarios.
+- **Comandos locales:** `NOT_RUN`; `git clone` falló porque este entorno no pudo resolver `github.com`. No afirmar resultados locales. Los comandos de sintaxis y las tres suites deben verificarse en CI para el SHA final exacto.
+- **CI final:** pendiente de consulta para el SHA final posterior a esta documentación. No reutilizar runs de SHA anteriores como evidencia del HEAD actual.
+- **Chromium real / suspensión natural MV3 / cancelación del polling:** `NOT_RUN`. Esta tarea no implementa cancelación cooperativa del content script.
+- **Estado provisional:** `PARTIAL` hasta confirmar Actions y revisar cualquier fallo reproducido.
+- **TIMER:** tiempo medido no disponible; estimación restante 30–90 min para CI y reconciliación; 1–3 h para navegador real si está accesible. Estabilización BRIDGE 3–7 días, confianza baja.
+- **Siguiente tarea única:** obtener y revisar CI del SHA final exacto, sin ampliar el alcance a cancelación del content script.
