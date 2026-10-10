@@ -91,3 +91,8 @@ La reinicialización en Node **no es** una suspensión real de Chromium. No repr
 7. Registra por separado cierre de pestaña, recarga de extensión, reinicio del navegador y suspensión natural. No envíes datos privados en logs o capturas.
 
 El test automatizado de timeout prueba la expiración del polling del content script con reloj simulado; no certifica la latencia real de ChatGPT ni el ciclo de vida del navegador. Consulta `STATUS.md`, `ROADMAP.md` y `WORK_LOG.md` para el SHA exacto verificado y los casos `NOT_RUN`.
+
+
+## BRIDGE-004: estado de validación de navegador
+
+La validación real de Chrome/Brave está **`NOT_RUN`** en el checkpoint BRIDGE-004 porque el conector de navegador no estaba conectado y el entorno de ejecución no tiene acceso a una instalación local. La CI de Node no demuestra suspensión natural MV3 ni comportamiento real de STOP. No se modificó código de producción sin un defecto reproducible. Ejecuta el protocolo de `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md` y registra navegador, versión, sistema operativo, estados y errores técnicos, nunca contenido privado de conversaciones.

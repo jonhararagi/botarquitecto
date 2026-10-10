@@ -84,3 +84,20 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Evidencia:** `PASS_REAL` GitHub Actions [run 38035650008](https://github.com/jonhararagi/botarquitecto/actions/runs/38035650008), conclusión `success` sobre ese SHA. El workflow ejecutó comprobaciones de sintaxis, contratos estáticos, pruebas dinámicas del service worker y prueba del content script con reloj simulado.
 - **Importante:** esta CI valida la suite automatizada en Node, no suspensión natural ni reinicio real de Chromium. No se ejecutaron pruebas locales ni navegador gráfico; ambos siguen `NOT_RUN`.
 - **Estado:** automatización verificada para el SHA indicado; BRIDGE-003 continúa parcial por validación de navegador y limitación de cancelación al recibir STOP.
+
+
+## 2026-10-10 — BRIDGE-004 inspección y protocolo manual (PARTIAL)
+
+- **HEAD BEFORE:** `69626bcaf814a4b5f00e482f8ba75fa9f396233d`; consultado directamente en GitHub. La rama `worker/bridge-001-validation` y PR #6 coincidían en ese SHA al iniciar.
+- **MAIN SHA:** `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- **PR #6:** abierto, no fusionado. Consulta de revisiones e hilos: ninguno registrado en el momento de inspección.
+- **Archivos inspeccionados:** `bridge/manifest.json`, `bridge/service-worker.js`, `bridge/content.js`, `bridge/control.js`, `bridge/popup.js`, `bridge/tests/validation.test.mjs`, `bridge/tests/service-worker.dynamic.test.mjs`, `bridge/tests/content.timeout.test.mjs`, `.github/workflows/bridge-validation.yml`, `STATUS.md`, `ROADMAP.md`, `README.md` y esta bitácora.
+- **CI al entrar:** `PASS_REAL`, run [38035719789](https://github.com/jonhararagi/botarquitecto/actions/runs/38035719789), `success` en el SHA exacto `69626bcaf814a4b5f00e482f8ba75fa9f396233d`. Los comandos de sintaxis y suites automatizadas constan en el workflow. No se afirma ejecución local.
+- **Entorno navegador:** `NOT_RUN`. El conector Opera respondió `Browser not connected`; el entorno de shell tampoco pudo resolver `github.com` al intentar consultar Git remotamente. No se pudo cargar una extensión unpacked ni inspeccionar una instalación real de Chrome/Brave.
+- **Revisión estática:** `PASS_STATIC`. El manifiesto declara MV3 y `service-worker.js`; el worker invalida el job en STOP y filtra respuestas según el job activo. El content script mantiene polling de respuesta con deadline y no se encontró un handler explícito de cancelación de polling por STOP. Esta lectura no equivale a observación en navegador.
+- **Cambios de producción:** ninguno; no hay defecto Chromium reproducido y no se introducen cambios preventivos.
+- **Documentación:** se añade `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md` con precondiciones, resultados esperados y separación entre suspensión natural, recarga manual, cierre de pestaña, reinicio de navegador y reinicialización Node.
+- **Verificación de este ciclo:** la CI previa sigue siendo válida solo para el SHA de entrada. La actualización documental debe disparar/recibir una ejecución de CI sobre el nuevo SHA antes de considerar verificada esa revisión final. No se ejecutaron comandos Node localmente.
+- **Limitación/decisión:** el objetivo central de BRIDGE-004 sigue bloqueado por falta de navegador real. Estado `PARTIAL / NOT_READY`; PR #6 sigue abierto, sin merge y sin escritura en `main`.
+- **TIMER:** tiempo invertido medido no disponible. Estimación restante 1–3 h de prueba manual con navegador conectado, más 30–60 min de reconciliación de evidencias y CI. Estimación de estabilización BRIDGE: 3–7 días de trabajo concentrado, confianza baja.
+- **Siguiente tarea única:** ejecutar el protocolo manual de BRIDGE-004 en Chrome o Brave real y aportar los resultados técnicos sin datos privados.

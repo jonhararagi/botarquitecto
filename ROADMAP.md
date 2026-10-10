@@ -80,3 +80,21 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - [ ] No declarar terminada la resiliencia Manifest V3 hasta completar la validación real de navegador y los casos pendientes.
 
 **Evidencia actual:** `PASS_STATIC` revisión del código y workflow en la rama; `PASS_REAL` [CI run 38035650008](https://github.com/jonhararagi/botarquitecto/actions/runs/38035650008), success en SHA exacto `dfa5a00fbb46061d6a5e39be633716bd3536ef59`, incluidos syntax, contratos, suite dinámica y timeout del content script con reloj simulado. `NOT_RUN` ejecución local y navegador real.
+
+
+## BRIDGE-004 — validación real de Chromium (bloqueada por entorno)
+
+- [x] Reconfirmar SHA de `main`, rama de trabajo y PR #6 antes de cambios.
+- [x] Inspeccionar manifiesto, service worker, content script, panel, workflow y pruebas automatizadas existentes.
+- [x] Consultar estado/revisiones del PR y CI sobre el SHA de entrada.
+- [x] Confirmar que el conector de navegador no está disponible; no simular una prueba real.
+- [x] Preparar protocolo manual reproducible en `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md`.
+- [ ] Cargar `bridge/` en Chrome o Brave real y registrar versión/SO/errores de inicialización.
+- [ ] Observar suspensión natural/reactivación MV3 separada de recarga manual y reinicio del navegador.
+- [ ] Validar recuperación de estado ambiguo, historial, no-replay y respuesta obsoleta en navegador real.
+- [ ] Probar STOP con un turno pendiente en una pestaña real y documentar si el polling continúa hasta timeout.
+- [ ] Revisar CI de GitHub Actions sobre el SHA final que resulte de la actualización documental.
+
+**Estado:** `PARTIAL / NOT_READY`. El último run verificado antes de la documentación es [38035719789](https://github.com/jonhararagi/botarquitecto/actions/runs/38035719789), `success` en `69626bcaf814a4b5f00e482f8ba75fa9f396233d`. Es evidencia de automatización Node, no de Chromium. No hay corrección de producción porque no se ha reproducido un defecto real.
+
+**Siguiente tarea única:** ejecutar el protocolo manual BRIDGE-004 en un Chrome o Brave accesible y adjuntar evidencia técnica no sensible.

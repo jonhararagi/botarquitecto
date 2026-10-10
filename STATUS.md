@@ -62,3 +62,21 @@
 - Tiempo invertido medido: no disponible.
 - Tiempo restante estimado: 1–3 h para CI, corregir errores y revisar el diff; 1–3 h adicionales para validar Chrome/Brave si hay entorno gráfico.
 - Estabilización global BRIDGE: 3–7 días de trabajo concentrado, confianza baja. La estimación no implica que se haya medido tiempo real.
+
+
+## BRIDGE-004 — checkpoint actual (2026-10-10)
+
+**Decisión: `PARTIAL / NOT_READY`.** La validación real solicitada no pudo ejecutarse: el conector de navegador devolvió `Browser not connected`, y el entorno de ejecución no tiene acceso de red a GitHub ni a una instalación local de Chrome/Brave. No se atribuye esta limitación al código de la extensión.
+
+- **MAIN SHA:** `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- **HEAD de entrada verificado:** `69626bcaf814a4b5f00e482f8ba75fa9f396233d`; es también el SHA actual de la rama al comenzar BRIDGE-004.
+- **PR #6:** abierto, no fusionado; sin reviews ni hilos de revisión registrados en la consulta realizada.
+- **CI de entrada:** `PASS_REAL`, GitHub Actions [run 38035719789](https://github.com/jonhararagi/botarquitecto/actions/runs/38035719789), `success` en el SHA exacto de entrada. Esa CI es automatización en Node, no prueba de navegador.
+- **`PASS_STATIC`:** inspección remota del manifiesto, service worker, content script, panel, workflow y suites existentes.
+- **`NOT_RUN`:** carga en Chrome/Brave; creación y selección visual de sesión; suspensión natural MV3; recuperación después de reactivación; recarga manual; cierre/reinicio del navegador; STOP en pestaña real; polling del content script observado en navegador; respuesta tardía real. El conector Opera no estaba conectado y no se usó como sustituto.
+- **STOP según código y pruebas simuladas:** el worker invalida `activeJobId`, detiene el bucle y descarta respuestas que ya no coinciden con el job activo. El content script no expone una orden explícita de cancelación del polling en curso, por lo que puede seguir esperando hasta su timeout. Esto es una limitación del comportamiento actual, no una prueba real de navegador.
+- **Cambios de producción:** ninguno. No se reprodujo un defecto en Chromium que justifique modificar semánticas o añadir cancelación preventiva.
+- **Protocolo manual:** `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md` contiene precondiciones, escenarios separados y evidencias que deben registrarse sin contenido privado.
+- **TIMER:** tiempo invertido medido no disponible. Estimación restante para completar BRIDGE-004: 1–3 h de validación manual una vez disponible un navegador conectado, más 30–60 min para registrar evidencias y reconciliar CI/documentación. BRIDGE global: 3–7 días de trabajo concentrado, confianza baja; recalibrar tras las pruebas reales.
+
+Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 incluidas en entradas anteriores. El porcentaje global sigue en 15% con confianza baja; no se aumenta sin evidencia adicional.
