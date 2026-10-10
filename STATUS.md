@@ -131,3 +131,10 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - El error de una escritura se devuelve a sus propios llamadores; no se reintenta automáticamente. La cola es volátil y no añade campos al esquema. Si el worker termina antes de persistir una solicitud, se aplica la recuperación conservadora existente al reiniciar.
 - Estado actual: `PARTIAL` hasta verificar CI en el SHA final exacto. Pruebas locales no ejecutadas; Chrome/Brave real y suspensión natural MV3 siguen pendientes. No se modifican `content.js`, permisos ni dependencias. PR #6 abierto, sin merge.
 - TIMER: tiempo medido no disponible; 30–90 min estimados para CI/correcciones y 1–2 h para validación manual si hay navegador. Estabilización BRIDGE: 3–7 días, confianza baja.
+
+
+### BRIDGE-007 — checkpoint automatizado
+
+- CI de código: [run 38050951438](https://github.com/jonhararagi/botarquitecto/actions/runs/38050951438) pasó en el SHA exacto `039e00987e3e3323e3af0a1fe9002f6790bf2e8a`. Los cuatro checks de sintaxis y las tres suites de pruebas pasaron.
+- Dos ejecuciones previas detectaron problemas en las pruebas de intercalado, no en sintaxis: una prueba antigua esperaba escrituras paralelas y otra no había iniciado la sesión. Ambas expectativas quedaron corregidas y la suite dinámica pasó en la ejecución posterior.
+- La bitácora actualizada genera un SHA nuevo; consultar CI del HEAD final. Chrome/Brave real sigue pendiente. Estado BRIDGE global: `PARTIAL / NOT_READY`.
