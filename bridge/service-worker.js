@@ -462,11 +462,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      if (s.completingJobId && s.completingJobId === jobId) {
-        sendResponse({ ok: true, duplicate: true });
-        return;
-      }
-
       // A late completion from a stopped/replaced turn must never advance the loop.
       if (!s.running || s.stopRequested || !s.activeJobId) {
         sendResponse({ ok: true, ignored: true });
@@ -479,6 +474,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       if (jobId !== s.activeJobId || role !== s.activeRole || senderTabId !== expectedTabId) {
         sendResponse({ ok: false, error: "Finalización de turno obsoleta o no coincidente" });
+        return;
+      }
+
+      // Only the expected role and tab may receive an idempotent acknowledgement
+      // while a valid completion is still being persisted.
+      if (s.completingJobId && s.completingJobId === jobId) {
+        sendResponse({ ok: true, duplicate: true });
         return;
       }
 
