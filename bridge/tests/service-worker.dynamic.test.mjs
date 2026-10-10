@@ -509,3 +509,74 @@ test("un turno finalizado no se vuelve a procesar al reinicializar el worker", a
   assert.equal(recovered.iteration, 0);
   assert.equal(restarted.sent.length, 0);
 });
+
+
+test("timeout del turno pone la sesión en ERROR y descarta la respuesta tardía original", async () => {
+  const h = await newHarness();
+  const id = (await h.state()).sessions[0].id;
+  await start(h, id);
+  const pending = (await h.state()).sessions[0];
+  const timedOutJob = pending.activeJobId;
+  await complete(h, pending, {
+    jobId: timedOutJob, role: "CEREBRO", ok: false,
+    error: "Timeout esperando una respuesta nueva de ChatGPT", text: ""
+  });
+  const afterTimeout = (await h.state()).sessions[0];
+  assert.equal(afterTimeout.running, false);
+  assert.equal(afterTimeout.activeJobId, null);
+  assert.match(afterTimeout.status, /ERROR.*Timeout/);
+  const sendsAfterTimeout = h.sent.length;
+
+  await complete(h, afterTimeout, {
+    jobId: timedOutJob, role: "CEREBRO", ok: true, text: "respuesta tardía"
+  });
+  const afterLateReply = (await h.state()).sessions[0];
+  assert.equal(afterLateReply.status, afterTimeout.status);
+  assert.equal(afterLateReply.iteration, 0);
+  assert.equal(h.sent.length, sendsAfterTimeout);
+});
+
+test("un TURN_COMPLETE duplicado del mismo job no incrementa dos veces la iteración", async () => {
+  const h = await newHarness();
+  const id = (await h.state()).sessions[0].id;
+  await start(h, id);
+  const first = (await h.state()).sessions[0];
+  const oldJob = first.activeJobId;
+  await complete(h, first, { jobId: oldJob, role: "CEREBRO", text: "resultado único" });
+  const afterFirst = (await h.state()).sessions[0];
+  const iteration = afterFirst.iteration;
+  const nextJob = afterFirst.activeJobId;
+  const sends = h.sent.length;
+
+  await complete(h, afterFirst, { jobId: oldJob, role: "CEREBRO", text: "resultado único" });
+  const afterDuplicate = (await h.state()).sessions[0];
+  assert.equal(afterDuplicate.iteration, iteration);
+  assert.equal(afterDuplicate.activeJobId, nextJob);
+  assert.equal(h.sent.length, sends);
+});
+
+test("la hidratación repara sesiones incompletas sin romper el resto del almacenamiento", async () => {
+  const h = await newHarness({
+    savedState: {
+      bridgeStateV5: {
+        version: 5, activeSessionId: "id-ausente",
+        sessions: [
+          { id: "sana", name: "Sana", status: "IDLE", running: false, paused: false, log: [{ role: "USUARIO", text: "historial conservado" }] },
+          { name: "Sin id ni log", running: true, status: "RUNNING — incompleta", activeJobId: "job-ambiguo" },
+          null
+        ]
+      }
+    }
+  });
+  const state = await h.state();
+  assert.equal(state.sessions.length, 2);
+  assert.equal(state.activeSessionId, "sana");
+  assert.equal(state.sessions.find(s => s.id === "sana").log[0].text, "historial conservado");
+  const repaired = state.sessions.find(s => s.name === "Sin id ni log");
+  assert.ok(repaired.id);
+  assert.deepEqual(repaired.log, []);
+  assert.equal(repaired.running, false);
+  assert.equal(repaired.activeJobId, null);
+  assert.match(repaired.status, /ERROR.*ambiguo/);
+  assert.equal(h.persisted().bridgeStateV5.activeSessionId, "sana");
+});
