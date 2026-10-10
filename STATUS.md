@@ -45,3 +45,20 @@
 - **Estimación restante BRIDGE-002:** 30–60 min para revisión del diff/PR y decisión del BOT CEREBRO; 30–60 min adicionales si se dispone de navegador para comprobación manual. La cobertura dinámica actual y su CI están verificadas.
 - **Estimación restante para estabilizar BRIDGE:** 3–7 días de trabajo concentrado, confianza baja.
 - **Incertidumbre:** depende de los resultados reales de CI, la disponibilidad de Chrome/Brave y la complejidad de los casos de suspensión/reinicio y respuestas tardías.
+
+
+## BRIDGE-003 — recuperación MV3 y timeout (en progreso)
+
+- **Política implementada en la rama, pendiente de CI:** durante la hidratación, cualquier sesión que parezca activa (`running`, `activeJobId` o estado `STARTING`/`RUNNING`/`AUTO_FORWARD`) se detiene en `ERROR` y se limpian `activeJobId`/`activeRole`. No se reenvía el turno ambiguo. Se conserva el log. Una sesión pausada sin job pendiente queda pausada; sesiones inactivas, detenidas, finalizadas y con límite alcanzado conservan su estado.
+- **Estado persistido incoherente:** se normalizan objetos de sesión incompletos, se conserva el historial válido y se repara `activeSessionId`. Los registros nulos no contienen una sesión recuperable y se descartan.
+- **Timeout:** el content script ya tiene deadline en `waitForCompletedResponse`; se añade un test que ejecuta el archivo real `bridge/content.js` con reloj simulado. El service worker trata el error de timeout como fallo terminal del job; `jobId` ya no activo impide que una respuesta tardía modifique o reenvíe el flujo.
+- **Pruebas añadidas:** reinicialización del service worker real en un nuevo contexto `vm` con el mismo snapshot de storage; turno activo ambiguo sin replay; sesión pausada sin job; sesión finalizada; `TURN_COMPLETE` tardío tras reinicio; timeout, respuesta tardía, duplicado del mismo job y estado incompleto.
+- **Evidencia actual:** `PASS_STATIC` para revisión de los cambios remotos. `NOT_RUN` para ejecución local y CI posterior a los cambios; no marcar como superada la nueva suite hasta consultar el run que valide el SHA final. `NOT_RUN` para Chrome/Brave, suspensión natural y reinicio real de Chromium.
+- **Límite funcional conocido:** STOP invalida el job en el service worker, pero no cancela directamente la generación o el polling ya iniciado en la pestaña ChatGPT. Una respuesta tardía se ignora en el worker, aunque el content script puede seguir ocupado hasta su timeout. Se documenta como limitación para una corrección acotada posterior si la revisión exige cancelación activa.
+- **Estado del proyecto:** `PARTIAL / NOT_READY`. No es producción ni resiliencia MV3 demostrada.
+
+### TIMER BRIDGE-003
+
+- Tiempo invertido medido: no disponible.
+- Tiempo restante estimado: 1–3 h para CI, corregir errores y revisar el diff; 1–3 h adicionales para validar Chrome/Brave si hay entorno gráfico.
+- Estabilización global BRIDGE: 3–7 días de trabajo concentrado, confianza baja. La estimación no implica que se haya medido tiempo real.
