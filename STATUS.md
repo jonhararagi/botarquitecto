@@ -171,3 +171,8 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Pendiente:** CI final exacta y validación manual Chrome/Brave. Los mocks no prueban suspensión real del service worker ni cancelación de generación externa.
 - **TIMER:** tiempo medido no disponible; estimación 2–5 h de tarea, 1–2 h de validación manual; estabilización BRIDGE restante 3–7 días, confianza baja.
 
+### BRIDGE-008 — verificación CI completada
+- **SHA de código verificado:** `a9bb330b0a72b054267da82729c61c8538378a29`.
+- **GitHub Actions:** [run 38056070845](https://github.com/jonhararagi/botarquitecto/actions/runs/38056070845), conclusión `success` sobre ese SHA exacto.
+- Pasaron sintaxis JavaScript, contratos estáticos, pruebas dinámicas del service worker, timeout del content script y test integrado content script + service worker.
+- No se ejecutaron comandos Node localmente mediante esta sesión. La validación Chrome/Brave real sigue `NOT RUN`; no declarar producción lista.
