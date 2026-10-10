@@ -11,14 +11,15 @@
 - Persistencia mediante `chrome.storage.local`, sesiones múltiples, límites de iteración/timeout y asociación de turnos por `jobId` y pestaña.
 - BRIDGE-001 añadió contratos estáticos, comprobaciones de sintaxis y CI. El run anterior [38025331572](https://github.com/jonhararagi/botarquitecto/actions/runs/38025331572) valida el SHA de implementación de BRIDGE-001, no los nuevos tests dinámicos.
 - BRIDGE-002 añade `bridge/tests/service-worker.dynamic.test.mjs`, que ejecuta el archivo real `bridge/service-worker.js` en un contexto Node `vm` con mocks de Chrome. La CI se separó en pasos para contratos y pruebas dinámicas.
-- La suite nueva está implementada en la rama; su resultado de CI debe verificarse antes de declarar aceptación.
+- La suite dinámica se ejecutó en GitHub Actions run [38033284641](https://github.com/jonhararagi/botarquitecto/actions/runs/38033284641), sobre el SHA de código `f4805811071ed775eb5a75245c8fa82c4ab71521`; los pasos de sintaxis, contratos estáticos y pruebas dinámicas terminaron con `success`. La verificación de navegador sigue pendiente.
 
 ## Evidencia y límites
 
 - `PASS_STATIC`: revisión del service worker, content script, contratos existentes y manifiesto.
-- `PARTIAL`: se añadió arnés dinámico con pruebas para hidratación, creación/selección/eliminación de sesiones, límites, inicio válido/inválido, competencia de dos sesiones por pestañas, asociación de respuestas, respuestas obsoletas, duplicados, pausa/reanudación/parada, límite de iteraciones, errores de mensajería y cierre de pestaña.
-- `NOT_RUN`: no se ejecutó localmente en este entorno; se requiere confirmar la ejecución de GitHub Actions sobre el nuevo SHA. Tampoco se hizo prueba manual en Chrome/Brave.
-- `NOT_RUN`: suspensión y reinicio real del service worker, recuperación tras cierre abrupto y recorrido de extremo a extremo en navegador.
+- `PASS_REAL`: GitHub Actions run [38033284641](https://github.com/jonhararagi/botarquitecto/actions/runs/38033284641) concluyó `success`; los pasos de sintaxis, contratos estáticos y suite dinámica finalizaron correctamente en el SHA de código `f4805811071ed775eb5a75245c8fa82c4ab71521`.
+- `PASS_REAL`: el arnés dinámico ejecutó el service worker real y pasó pruebas de hidratación, creación/selección/eliminación, límites, inicio válido/inválido, competencia determinista de sesiones por pestañas, asociación de respuestas, respuestas obsoletas, duplicados, pausa/reanudación/parada, límite de iteraciones, error de mensajería y cierre de pestaña.
+- `NOT_RUN`: no se ejecutó localmente en este entorno. Tampoco se hizo prueba manual en Chrome/Brave.
+- `NOT_RUN`: suspensión y reinicio real del service worker, recuperación tras cierre abrupto, expiración real del content script y recorrido de extremo a extremo en navegador.
 - Las pruebas usan mensajes sintéticos dentro del arnés; no se enviaron mensajes reales a ChatGPT.
 - El test de concurrencia debe evaluarse con el resultado de CI; no se presupone una carrera sin reproducción.
 
