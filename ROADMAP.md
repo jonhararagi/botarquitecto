@@ -5,17 +5,17 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 ## P0 — Control del proyecto y reproducibilidad
 - [x] Definir protocolo CEREBRO/OBRERO y reglas de evidencia.
 - [x] Registrar línea base inicial, riesgos y próxima tarea.
-- [ ] Crear validaciones automatizadas reproducibles y documentar cómo ejecutarlas.
-- [ ] Añadir CI para validaciones estáticas y pruebas unitarias.
+- [x] Crear validaciones automatizadas reproducibles y documentar cómo ejecutarlas (suite inicial de contratos estáticos; CI PASS_REAL en run 38025331572).
+- [x] Añadir CI para validaciones estáticas y pruebas de contrato (`.github/workflows/bridge-validation.yml`; CI PASS_REAL en run 38025331572).
 - [ ] Establecer política de versiones y registro de cambios.
 
 ## P1 — Integridad del bucle
 - [ ] Extraer funciones puras para validación de sesiones, límites y transiciones cuando sea viable.
-- [ ] Cubrir inicio, finalización, error, pausa, reanudación y parada.
+- [x] Ejecutar en CI la suite dinámica de inicio, finalización, error, pausa, reanudación y parada añadida en BRIDGE-002 (run 38033318280, success).
 - [ ] Probar que cada respuesta se reenvía como máximo una vez y solo al rol correcto.
-- [ ] Probar respuestas vacías, duplicadas, tardías, timeout y mensajes con marcador.
-- [ ] Revisar carrera entre START_LOOP simultáneos y asignación de pestañas.
-- [ ] Garantizar que una sesión nunca envía a una pestaña asignada a otra sesión activa.
+- [ ] Completar pruebas de timeout/expiración y respuestas posteriores al timeout; las respuestas vacías, duplicadas y stale job se prueban ya en el arnés.
+- [x] Confirmar en CI el test determinista de START_LOOP concurrentes y reserva de pestañas (run 38033284641, success).
+- [x] Suite de mocks comprueba la competencia por pestañas y aislamiento entre sesiones (run 38033284641, success); queda pendiente validación en navegador real.
 
 ## P2 — Resiliencia Manifest V3
 - [ ] Definir qué ocurre al suspender/reiniciar service worker durante un turno.
@@ -51,6 +51,12 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 4. Documentación y estado actualizados en el mismo ciclo.
 5. Riesgos conocidos anotados y siguiente tarea única definida.
 
+## BRIDGE-002 — evidencia pendiente de cierre
+
+- [x] GitHub Actions run [38033318280](https://github.com/jonhararagi/botarquitecto/actions/runs/38033318280) terminó en success para el head `e1405f1127e05c13260e639f21f1951c896a0fb6`.
+- [ ] Mantener pendientes la validación manual en Chrome/Brave, timeout real del content script y recuperación tras suspensión/reinicio real del service worker.
+- [ ] No declarar producción lista por pasar la suite dinámica de Node.
+
 ## TIMER orientativo
 - P0 automatización mínima: 2–4 h de implementación inicial + 1–2 h de pruebas.
 - P1 integridad del bucle: 1–3 días según facilidad para aislar lógica y reproducir fallos.
@@ -59,3 +65,136 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 - P4 seguridad/licencias: 1–2 días de revisión más correcciones.
 - P5 distribución: 0.5–2 días.
 Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validación manual de navegador se registra aparte.
+
+
+## BRIDGE-003 — política de recuperación y expiración (en curso)
+
+- [x] Definir en código una recuperación conservadora que no reenvía turnos ambiguos al hidratar el worker.
+- [x] Conservar una sesión pausada sin job pendiente, las sesiones inactivas y el historial válido; reparar el selector activo inválido.
+- [x] Añadir pruebas automatizadas para reinicialización simulada, respuesta antigua, timeout informado al worker, duplicado del mismo job y estado persistido incompleto.
+- [x] Añadir a CI una prueba del archivo real `content.js` con reloj simulado para que el timeout no dependa de esperas de pared.
+- [ ] Verificar la CI posterior a estos cambios sobre el SHA final exacto.
+- [ ] Demostrar todos los casos de timeout/respuesta tardía y la semántica STOP/PAUSE bajo pruebas deterministas completas.
+- [ ] Validar suspensión natural, recarga y reinicio del service worker en Chrome o Brave real.
+- [ ] Decidir si se necesita cancelación explícita del polling/generación del content script al recibir STOP; hoy el worker invalida la respuesta, pero no aborta directamente el polling ya iniciado.
+- [ ] No declarar terminada la resiliencia Manifest V3 hasta completar la validación real de navegador y los casos pendientes.
+
+**Evidencia actual:** `PASS_STATIC` revisión del código y workflow en la rama; `PASS_REAL` [CI run 38035650008](https://github.com/jonhararagi/botarquitecto/actions/runs/38035650008), success en SHA exacto `dfa5a00fbb46061d6a5e39be633716bd3536ef59`, incluidos syntax, contratos, suite dinámica y timeout del content script con reloj simulado. `NOT_RUN` ejecución local y navegador real.
+
+
+## BRIDGE-004 — validación real de Chromium (bloqueada por entorno)
+
+- [x] Reconfirmar SHA de `main`, rama de trabajo y PR #6 antes de cambios.
+- [x] Inspeccionar manifiesto, service worker, content script, panel, workflow y pruebas automatizadas existentes.
+- [x] Consultar estado/revisiones del PR y CI sobre el SHA de entrada.
+- [x] Confirmar que el conector de navegador no está disponible; no simular una prueba real.
+- [x] Preparar protocolo manual reproducible en `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md`.
+- [ ] Cargar `bridge/` en Chrome o Brave real y registrar versión/SO/errores de inicialización.
+- [ ] Observar suspensión natural/reactivación MV3 separada de recarga manual y reinicio del navegador.
+- [ ] Validar recuperación de estado ambiguo, historial, no-replay y respuesta obsoleta en navegador real.
+- [ ] Probar STOP con un turno pendiente en una pestaña real y documentar si el polling continúa hasta timeout.
+- [ ] Revisar CI de GitHub Actions sobre el SHA final que resulte de la actualización documental.
+
+**Estado:** `PARTIAL / NOT_READY`. El último run verificado antes de la documentación es [38035719789](https://github.com/jonhararagi/botarquitecto/actions/runs/38035719789), `success` en `69626bcaf814a4b5f00e482f8ba75fa9f396233d`. Es evidencia de automatización Node, no de Chromium. No hay corrección de producción porque no se ha reproducido un defecto real.
+
+**Siguiente tarea única:** ejecutar el protocolo manual BRIDGE-004 en un Chrome o Brave accesible y adjuntar evidencia técnica no sensible.
+
+
+### BRIDGE-004 — checkpoint CI de documentación
+
+- [x] CI completada en el SHA `c7772931d5152da0922765f552cafcbff4761802`: [run 38036355246](https://github.com/jonhararagi/botarquitecto/actions/runs/38036355246), `success`.
+- [ ] Ejecutar y documentar la validación real de Chrome/Brave; la CI verde no la reemplaza.
+
+
+## BRIDGE-005 — auditoría de STOP y diseño de cancelación cooperativa
+
+- [x] Reinspeccionar HEAD de rama, base `main` y estado del PR #6 antes de documentar.
+- [x] Inspeccionar worker, content script, controles, popup, pruebas y workflow.
+- [x] Documentar flujo de START/PAUSE/RESUME/STOP/timeout/TURN_COMPLETE y fallos de mensajería.
+- [x] Diseñar identidad de cancelación, validación después de awaits, respuesta tardía, fallo de cancelación y recuperación MV3 conservadora.
+- [x] Documentar tabla de transiciones y 11 escenarios de prueba, indicando Node/mocks, Chromium real o ambos.
+- [ ] Añadir y ejecutar tests deterministas de intercalado STOP con `dispatchTurn()` y `finishTurn()`.
+- [ ] Evaluar en Chrome/Brave real el envío de cancelación, polling y ciclo de vida natural MV3.
+- [ ] No implementar cancelación en producción hasta tener los tests deterministas y una decisión de alcance separada.
+
+**Documento:** `docs/qa/BRIDGE-005-STOP-CANCELLATION-DESIGN.md`.  
+**Evidencia:** `PASS_STATIC` para inspección de fuentes; `NOT_RUN` para pruebas nuevas y Chromium real. CI histórica del SHA de entrada no valida cambios documentales posteriores.  
+**Estado:** `PARTIAL / DESIGN_ONLY`; no producción.  
+**Siguiente tarea única:** pruebas deterministas de intercalado STOP/dispatchTurn/finishTurn.  
+**TIMER:** auditoría/documentación estimada 2–4 h, confianza media; implementación posterior 2–6 h si se autoriza, confianza baja; estabilización BRIDGE 3–7 días, confianza baja.
+
+
+## BRIDGE-006 — STOP/dispatchTurn/finishTurn (en verificación)
+
+- [x] Añadir barreras deterministas al arnés Node `vm` para `tabs.get()` y persistencia.
+- [x] Añadir regresión A: STOP durante validación de pestaña y excepción tardía.
+- [x] Añadir regresión B: STOP durante persistencia de `finishTurn()`, sin avanzar iteration/lastForwarded ni despachar.
+- [x] Añadir regresión C: STOP + START nuevo antes de liberar la ejecución antigua, cubriendo ABA y respuesta antigua.
+- [x] Añadir identidad de ejecución en memoria, invalidación de STOP y guardas después de awaits; no hay protocolo CANCEL ni cambios a content script.
+- [ ] Verificar en GitHub Actions la suite completa en el SHA final exacto.
+- [ ] Validar manualmente Chrome/Brave si se dispone de navegador; separar suspensión natural MV3 de la simulación Node.
+- [ ] No marcar BRIDGE como producción lista ni declarar cancelación del polling validada.
+- **Estado provisional:** `PARTIAL`, hasta CI exacta. Tiempo medido no disponible; 30–90 min estimados para CI/reconciliación; estabilización BRIDGE 3–7 días, confianza baja.
+- **Siguiente tarea única:** revisar CI del SHA final exacto y reparar solo fallos demostrados.
+
+
+- **Checkpoint CI intermedio:** run [38049197793](https://github.com/jonhararagi/botarquitecto/actions/runs/38049197793) falló en `bridge/tests/validation.test.mjs` porque un contrato estático esperaba la llamada antigua a `failSession()` sin token. La sintaxis pasó; las suites dinámicas no se ejecutaron en ese run. Se ajustó el contrato para exigir el token de ejecución. Esto fue un desajuste de la prueba estática tras el cambio de firma, no evidencia de que las pruebas A/B/C fallaran.
+- **Corrección del contrato:** commit `69a29da8b2837f3b495ded81b4cf9941ef05bd98`. CI posterior para el SHA final aún pendiente de consulta; no marcar PASS hasta verificarlo.
+
+
+- **CI de código y regresiones:** GitHub Actions [run 38049251019](https://github.com/jonhararagi/botarquitecto/actions/runs/38049251019), `success` en SHA exacto `0627b0a207a3f130b73f81c543bc9106854918fe`. Pasaron sintaxis, contratos estáticos, suite dinámica del worker real en Node `vm` y timeout del content script con reloj simulado. Las tres pruebas nuevas A/B/C están incluidas en esa suite dinámica.
+- **Alcance de evidencia:** Node mocks, no Chromium. No se validan suspensión natural MV3 ni cancelación del polling. La anotación documental actual genera un SHA nuevo; comprobar también Actions en el HEAD final de documentación antes del cierre.
+
+
+## BRIDGE-007 — cola de persistencia serializada
+
+- [x] Sustituir `saveRevision` y la reparación recursiva por un escritor único con coalescencia de solicitudes pendientes.
+- [x] Añadir regresiones deterministas para orden de escritura, STOP terminal y rechazo/recuperación de storage.
+- [ ] Verificar todas las comprobaciones en GitHub Actions sobre el SHA final exacto.
+- [ ] Ejecutar protocolo manual en Chrome/Brave real; Node VM no demuestra el ciclo de vida natural MV3.
+- [ ] Mantener BRIDGE como `PARTIAL / NOT_READY` hasta disponer de validación de navegador.
+
+
+### BRIDGE-007 — checkpoint de código
+
+- [x] CI automatizada pasó en el SHA de código `039e00987e3e3323e3af0a1fe9002f6790bf2e8a`: [run 38050951438](https://github.com/jonhararagi/botarquitecto/actions/runs/38050951438).
+- [x] Corregidas las regresiones de prueba detectadas por las dos primeras ejecuciones.
+- [ ] Verificar CI sobre el HEAD final posterior a la documentación.
+- [ ] Validar el ciclo de vida MV3 en Chrome/Brave real. No declarar producción lista antes de esa comprobación.
+
+
+## BRIDGE-008 — contrato integrado TURN_COMPLETE
+
+- Entrada: rama `worker/bridge-001-validation`, HEAD `532aaadbcc876f7496295b74e56a88100ea8f91d`; main `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR #6 abierto y sin merge. CI de entrada: run 38051025430, success sobre el SHA de entrada.
+- Diagnóstico: `dispatchTurn()` ya propagaba `sessionId` en `START_TURN`, pero ambas rutas de `runTurn()` omitían `sessionId` en `TURN_COMPLETE`. El worker permitía que cualquiera de las dos pestañas enviara resultados de cualquier rol y respondía `ok: true` aunque el job obsoleto se ignorara.
+- Corrección: propagar la identidad original en un único reporte terminal; validar sesión, job, rol permitido, booleano `ok`, job/rol activos y coincidencia exacta entre `sender.tab.id` y pestaña asignada al rol. Un rechazo de entrega no genera un segundo reporte y se registra separado del error de respuesta.
+- Chromium adjunta `sender.tab.id` como metadato al worker; el content script no lo falsifica.
+- Suite integrada añadida al workflow para éxito, fallo DOM controlado, identidad inválida/duplicada y respuesta posterior a STOP. Resultado definitivo pendiente de CI del SHA final exacto.
+- Chromium/Brave real, suspensión natural MV3 y cancelación cooperativa: `NOT_RUN`; BRIDGE sigue `PARTIAL / NOT_READY` hasta validar navegador real.
+- TIMER: tiempo medido no disponible; 2–5 h estimadas para esta tarea, 1–2 h adicionales para navegador real; estabilización BRIDGE 3–7 días, confianza baja.
+
+
+- BRIDGE-008 checkpoint: run [38055411681](https://github.com/jonhararagi/botarquitecto/actions/runs/38055411681) falló en sintaxis de la suite estática por una expresión regular mal escapada; no ejecutó suites dinámicas. Corregida la aserción para usar comprobaciones literales. Se actualizan expectativas previas para que jobs antiguos sean rechazados explícitamente, y se amplía D para comprobar que un job nuevo permanece intacto frente a una respuesta del job anterior. CI posterior pendiente.
+
+
+- BRIDGE-008 checkpoint: run [38055617828](https://github.com/jonhararagi/botarquitecto/actions/runs/38055617828) pasó sintaxis y contratos estáticos, pero detectó una expectativa antigua en la prueba de recuperación tras reinicio: el test esperaba `ok: true` para un job obsoleto. Se alinea con el nuevo contrato de rechazo explícito. Las pruebas dinámicas restantes de esa ejecución pasaron; el siguiente run debe validar el ajuste y la suite integrada.
+
+
+- BRIDGE-008 checkpoint: run [38055666417](https://github.com/jonhararagi/botarquitecto/actions/runs/38055666417) pasó sintaxis, contratos estáticos, suite dinámica del worker y timeout del content script, pero la nueva prueba integrada no observó el reporte terminal dentro del bucle de ticks. Se cambia el avance del reloj simulado a `runAll()` para drenar de forma determinista los timers pendientes; no se atribuye el fallo a producción sin aislarlo. Nueva CI pendiente.
+
+
+- BRIDGE-008 checkpoint: run [38055735149](https://github.com/jonhararagi/botarquitecto/actions/runs/38055735149) volvió a pasar sintaxis, contratos estáticos, suite dinámica y timeout. La integración aún no observó `TURN_COMPLETE`: el reloj se drenaba antes de que la cadena asíncrona inicial programara sus primeros timers. Se añade un vaciado de microtareas antes de avanzar el reloj, conservando timers simulados y sin usar sleeps reales. CI final pendiente.
+
+### BRIDGE-008 — finalización integrada
+- [x] Verificar el contrato actual de identidad `sessionId`/`jobId`/`role` en éxito y error.
+- [x] Verificar autorización del remitente contra la pestaña asignada al rol activo.
+- [x] Ampliar el test integrado para pestaña incorrecta que declara el rol correcto y para `jobId` no vacío en el reporte fallido.
+- [x] Hacer avanzar el reloj simulado por ticks, permitiendo que el polling programe sus temporizadores de forma determinista.
+- [ ] Confirmar suites de regresión y CI sobre el SHA final exacto.
+- [ ] Validar Chrome/Brave real, suspensión MV3 y flujo real antes de declarar producción lista.
+
+### BRIDGE-008 — verificación CI completada
+- **SHA de código verificado:** `a9bb330b0a72b054267da82729c61c8538378a29`.
+- **GitHub Actions:** [run 38056070845](https://github.com/jonhararagi/botarquitecto/actions/runs/38056070845), conclusión `success` sobre ese SHA exacto.
+- Pasaron sintaxis JavaScript, contratos estáticos, pruebas dinámicas del service worker, timeout del content script y test integrado content script + service worker.
+- No se ejecutaron comandos Node localmente mediante esta sesión. La validación Chrome/Brave real sigue `NOT RUN`; no declarar producción lista.

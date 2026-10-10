@@ -59,51 +59,16 @@ function getAssistantText(node) {
   return (body?.innerText || node.innerText || node.textContent || "").trim();
 }
 
-const COPY_RESPONSE_SELECTORS = [
-  'button[data-testid="copy-turn-action-button"]',
-  'button[aria-label*="Copy response" i]',
-  'button[aria-label*="Copiar respuesta" i]',
-  'button[aria-label="Copy" i]',
-  'button[aria-label="Copiar" i]',
-  'button[title*="Copy response" i]',
-  'button[title*="Copiar respuesta" i]'
-];
-
-function getCopyResponseButton(node) {
-  if (!node) return null;
-
-  const roots = [
-    node,
-    node.closest("article"),
-    node.closest('[data-testid^="conversation-turn-"]'),
-    node.parentElement
-  ].filter(Boolean);
-
-  for (const root of roots) {
-    for (const selector of COPY_RESPONSE_SELECTORS) {
-      const button = root.querySelector(selector);
-      if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") {
-        return button;
-      }
-    }
+// Lee el texto del turno assistant exacto que acabamos de estabilizar.
+// No dependemos de que ChatGPT mantenga un botón de copiar visible en su DOM:
+// sus selectores cambian entre versiones y no son la fuente del contenido.
+function responseTextFromSourceTurn(node, expectedText) {
+  if (!node || node !== getLatestAssistantNode()) {
+    throw new Error("La respuesta de origen cambió antes de confirmarse");
   }
-
-  return null;
-}
-
-function copyResponseFromChat(node, expectedText) {
-  const button = getCopyResponseButton(node);
-  if (!button) {
-    throw new Error("No está disponible la opción «Copiar respuesta» para la respuesta de origen");
-  }
-
-  const copied = stripBridgeMarker(expectedText);
-  if (!copied) throw new Error("«Copiar respuesta» está activa pero la respuesta de origen está vacía");
-
-  // El botón pertenece al mismo turno assistant recién generado.
-  // Usamos ese turno como única fuente de verdad; no leemos el último texto
-  // global del chat ni buscamos mensajes anteriores/recibidos.
-  return copied;
+  const responseText = stripBridgeMarker(expectedText);
+  if (!responseText) throw new Error("La respuesta de origen está vacía");
+  return responseText;
 }
 
 function insertText(element, text) {
@@ -190,7 +155,7 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
       const minimumDelayReached = Date.now() - sentAt >= minTurnDelayMs;
 
       if (stable && generationStopped && minimumDelayReached) {
-        return copyResponseFromChat(latestNode, current);
+        return responseTextFromSourceTurn(latestNode, current);
       }
     }
 
@@ -224,28 +189,25 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
 }
 
 async function runTurn(message) {
+  let completion;
   try {
-    const text = await sendAndWait(
-      message.text,
-      Number(message.timeoutMs) || 60000,
-      Number(message.minTurnDelayMs) || 0
-    );
-
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: true,
-      text,
-      role: message.role || "ChatGPT"
-    });
+    const text = await sendAndWait(message.text, Number(message.timeoutMs) || 60000, Number(message.minTurnDelayMs) || 0);
+    completion = { ok: true, text };
   } catch (error) {
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: false,
-      error: error.message || String(error),
-      role: message.role || "ChatGPT"
+    completion = { ok: false, error: error?.message || String(error) };
+  }
+  // Deliver one terminal report only. Delivery failure is not a ChatGPT result
+  // and must not trigger a second TURN_COMPLETE for this execution.
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "TURN_COMPLETE", sessionId: message.sessionId, jobId: message.jobId,
+      role: message.role, ...completion
     });
+    if (!response?.ok || response?.accepted !== true) {
+      console.error("BRIDGE TURN_COMPLETE no aceptado por el worker", response?.error || "respuesta sin confirmación");
+    }
+  } catch (deliveryError) {
+    console.error("BRIDGE no pudo entregar TURN_COMPLETE al worker", deliveryError?.message || String(deliveryError));
   } finally {
     if (activeJobId === message.jobId) activeJobId = null;
   }

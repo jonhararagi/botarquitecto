@@ -1,0 +1,38 @@
+name: BRIDGE validation
+
+on:
+  push:
+    branches: [main, "worker/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          node --check bridge/service-worker.js
+          node --check bridge/content.js
+          node --check bridge/control.js
+          node --check bridge/popup.js
+      - name: Run static regression contract tests
+        run: node --test bridge/tests/validation.test.mjs
+      - name: Run dynamic service-worker tests with Chrome API mocks
+        run: node --test bridge/tests/service-worker.dynamic.test.mjs
+      - name: Run real content-script timeout test with mocked clock
+        run: node --test bridge/tests/content.timeout.test.mjs
+      - name: Run control-panel iteration persistence regression test
+        run: node --test bridge/tests/control.iterations.test.mjs
+      - name: Run integrated content-script and service-worker contract tests
+        run: node --test bridge/tests/turn-completion.integration.test.mjs
