@@ -7,8 +7,9 @@ BRIDGE es una extensión Chromium Manifest V3 que coordina turnos entre pestaña
 ## Estructura
 
 - `bridge/`: extensión Chromium (manifest, panel de control, popup, service worker y content script).
-- `bridge/tests/validation.test.mjs`: pruebas de regresión contractuales basadas en inspección de fuentes.
-- `.github/workflows/bridge-validation.yml`: CI de sintaxis JavaScript y pruebas contractuales.
+- `bridge/tests/validation.test.mjs`: pruebas contractuales estáticas de fuentes y manifiesto.
+- `bridge/tests/service-worker.dynamic.test.mjs`: ejecuta el código real de `service-worker.js` dentro de un contexto Node `vm`, con mocks controlables de Chrome.
+- `.github/workflows/bridge-validation.yml`: CI de sintaxis, contratos estáticos y pruebas dinámicas.
 - `cerebro/INSTRUCCIONES.md`: protocolo obligatorio para agentes de planificación y auditoría.
 - `STATUS.md`: estado, riesgos, métrica orientativa y próxima tarea.
 - `ROADMAP.md`: hitos y condiciones de salida.
@@ -26,29 +27,31 @@ BRIDGE es una extensión Chromium Manifest V3 que coordina turnos entre pestaña
 
 Cada perfil aislado necesita su propia instalación. Una pestaña no debe pertenecer a dos sesiones activas.
 
-## Ejecutar validaciones
+## Ejecutar la suite completa
 
-Se necesita Node.js 22 o compatible con `node:test`; no hay dependencias npm para la suite inicial.
-
-Desde la raíz del repositorio, ejecuta:
+Se necesita Node.js 22. No hay dependencias npm para estas pruebas. Desde la raíz del repositorio:
 
 ```sh
 node --check bridge/service-worker.js
 node --check bridge/content.js
 node --check bridge/control.js
 node --check bridge/popup.js
-node --test bridge/tests/*.test.mjs
+node --test bridge/tests/validation.test.mjs
+node --test bridge/tests/service-worker.dynamic.test.mjs
 ```
 
-La workflow `.github/workflows/bridge-validation.yml` ejecuta los mismos comandos en push, pull request y ejecución manual. La suite actual verifica contratos estáticos en el código y el manifiesto; **no** sustituye pruebas dinámicas de estados, concurrencia ni pruebas de navegador.
+La suite dinámica evalúa el propio archivo `bridge/service-worker.js` y captura sus listeners de Chrome en un contexto `vm`. Simula almacenamiento, pestañas, mensajes y cierre de pestañas; no automatiza ni envía mensajes reales a ChatGPT. Los mocks verifican lógica interna y contratos, pero no reemplazan una prueba en Chrome/Brave ni demuestran el comportamiento de suspensión/reinicio real de Manifest V3.
+
+La workflow `.github/workflows/bridge-validation.yml` ejecuta sintaxis, pruebas contractuales y pruebas dinámicas por separado.
 
 ## Límites conocidos
 
 - Depende del DOM y de los selectores de ChatGPT, que pueden cambiar.
 - La extensión solo puede gestionar pestañas dentro del perfil de navegador donde está instalada.
 - El estado persistido en almacenamiento local no equivale a una garantía de recuperación transaccional después de un cierre abrupto.
+- La suite de mocks no representa completamente la planificación del event loop de Chromium, la suspensión del service worker ni la latencia real de mensajería.
 - La automatización puede fallar por cambios de interfaz, límites de servicio, red o generación incompleta. Debe detenerse ante ambigüedad.
-- La revisión documental, la suite contractual y CI no demuestran que el flujo funcione en un navegador real.
+- La revisión documental y las pruebas automatizadas no demuestran que el flujo funcione en un navegador real.
 
 ## Calidad, seguridad y material externo
 
