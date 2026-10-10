@@ -39,7 +39,7 @@ const ticks = async (count = 20) => {
   for (let i = 0; i < count; i++) await Promise.resolve();
 };
 
-test("periodic polling cannot overwrite an edited iteration limit and START_LOOP receives it", async () => {
+test("periodic polling cannot overwrite edited settings and START_LOOP receives the persisted values", async () => {
   const source = await readFile(CONTROL_PATH, "utf8");
   const ids = [
     "session", "sessionName", "brain", "worker", "seed", "iterations", "brainTimeout",
@@ -59,8 +59,8 @@ test("periodic polling cannot overwrite an edited iteration limit and START_LOOP
     minTurnDelayMs: 0, activeRole: null, activeJobId: null, log: []
   };
   let pollCallback = null;
-  let savedIterations = null;
-  let startedIterations = null;
+  let savedSettings = null;
+  let startedSettings = null;
   const snapshot = () => structuredClone({ version: 5, activeSessionId: session.id, sessions: [session] });
   const tabs = [
     { id: 11, title: "CEREBRO", url: "https://chatgpt.com/", windowId: 1 },
@@ -73,7 +73,7 @@ test("periodic polling cannot overwrite an edited iteration limit and START_LOOP
           return { ok: true, tabs, state: snapshot() };
         }
         if (message.type === "SAVE_SESSION") {
-          savedIterations = message.maxIterations;
+          savedSettings = structuredClone(message);
           Object.assign(session, {
             name: message.name, brainTabId: message.brainTabId, workerTabId: message.workerTabId,
             maxIterations: message.maxIterations, brainTimeoutMs: message.brainTimeoutMs,
@@ -82,7 +82,7 @@ test("periodic polling cannot overwrite an edited iteration limit and START_LOOP
           return { ok: true, state: snapshot() };
         }
         if (message.type === "START_LOOP") {
-          startedIterations = message.maxIterations;
+          startedSettings = structuredClone(message);
           session.running = true;
           session.status = "STARTING";
           session.maxIterations = message.maxIterations;
@@ -105,16 +105,41 @@ test("periodic polling cannot overwrite an edited iteration limit and START_LOOP
   assert.ok(pollCallback, "the control panel should start its state poll");
   assert.equal(elements.iterations.value, 10);
 
+  elements.sessionName.value = "Manual test";
+  elements.sessionName.dispatch("input");
   elements.iterations.value = "2";
   elements.iterations.dispatch("input");
+  elements.brainTimeout.value = "45";
+  elements.brainTimeout.dispatch("input");
+  elements.workerTimeout.value = "60";
+  elements.workerTimeout.dispatch("input");
+  elements.minTurnDelay.value = "3";
+  elements.minTurnDelay.dispatch("input");
   document.activeElement = elements.start;
   await pollCallback();
-  assert.equal(elements.iterations.value, "2", "a poll must not replace the user's in-progress edit with saved value 10");
+  assert.equal(elements.sessionName.value, "Manual test", "poll must not replace edited session name");
+  assert.equal(elements.iterations.value, "2", "poll must not replace edited iteration limit 2 with 10");
+  assert.equal(elements.brainTimeout.value, "45", "poll must not replace edited CEREBRO timeout 45 with saved 60");
+  assert.equal(elements.workerTimeout.value, "60", "poll must not replace edited OBRERO timeout 60 with saved 600");
+  assert.equal(elements.minTurnDelay.value, "3", "poll must not replace edited minimum delay");
 
   elements.seed.value = "synthetic seed";
   await elements.start.onclick();
-  assert.equal(savedIterations, 2, "SAVE_SESSION must persist the edited value");
-  assert.equal(startedIterations, 2, "START_LOOP must receive the same persisted limit");
+  assert.equal(savedSettings.name, "Manual test");
+  assert.equal(savedSettings.maxIterations, 2, "SAVE_SESSION must persist the edited iteration limit");
+  assert.equal(savedSettings.brainTimeoutMs, 45000, "SAVE_SESSION must persist CEREBRO timeout in ms");
+  assert.equal(savedSettings.workerTimeoutMs, 60000, "SAVE_SESSION must persist OBRERO timeout in ms");
+  assert.equal(savedSettings.minTurnDelayMs, 3000, "SAVE_SESSION must persist minimum delay in ms");
+  assert.equal(startedSettings.maxIterations, 2, "START_LOOP must receive the same iteration limit");
+  assert.equal(startedSettings.brainTimeoutMs, 45000, "START_LOOP must receive saved CEREBRO timeout");
+  assert.equal(startedSettings.workerTimeoutMs, 60000, "START_LOOP must receive saved OBRERO timeout rather than 600000");
+  assert.equal(startedSettings.minTurnDelayMs, 3000, "START_LOOP must receive saved minimum delay");
+  assert.equal(session.name, "Manual test");
   assert.equal(session.maxIterations, 2);
+  assert.equal(session.brainTimeoutMs, 45000);
+  assert.equal(session.workerTimeoutMs, 60000);
   assert.equal(elements.iterations.value, 2);
+  assert.equal(elements.brainTimeout.value, 45);
+  assert.equal(elements.workerTimeout.value, 60);
+  assert.equal(elements.minTurnDelay.value, 3);
 });

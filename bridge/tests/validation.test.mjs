@@ -75,10 +75,16 @@ test("manifest remains MV3 with only the intended ChatGPT hosts", async () => {
   assert.ok(!manifest.permissions.includes("nativeMessaging"));
 });
 
-test("control panel preserves an edited iteration limit until it has been saved", async () => {
+test("control panel preserves all edited settings until save", async () => {
   const control = await controlPromise;
   assert.match(control, /iterationsDirty=false/);
   assert.match(control, /if\(!iterationsDirty&&document\.activeElement!==iterations\)iterations\.value=x\.maxIterations\|\|10/);
   assert.match(control, /iterations\.addEventListener\("input",\(\)=>\{iterationsDirty=true\}\)/);
-  assert.match(control, /iterationsDirty=false;iterations\.value=current\(\)\?\.maxIterations\|\|10/);
+  assert.match(control, /sessionName\.addEventListener\("input",\(\)=>\{sessionNameDirty=true\}\)/);
+  assert.match(control, /brainTimeout\.addEventListener\("input",\(\)=>\{brainTimeoutDirty=true\}\)/);
+  assert.match(control, /workerTimeout\.addEventListener\("input",\(\)=>\{workerTimeoutDirty=true\}\)/);
+  assert.match(control, /minTurnDelay\.addEventListener\("input",\(\)=>\{minTurnDelayDirty=true\}\)/);
+  assert.match(control, /if\(!workerTimeoutDirty&&document\.activeElement!==workerTimeout\)workerTimeout\.value=Math\.round\(\(x\.workerTimeoutMs\|\|600000\)\/1000\)/);
+  assert.match(control, /iterationsDirty=false;brainTimeoutDirty=false;workerTimeoutDirty=false;minTurnDelayDirty=false/);
+  assert.match(control, /workerTimeoutMs:\(\+workerTimeout\.value\|\|600\)\*1000/);
 });
