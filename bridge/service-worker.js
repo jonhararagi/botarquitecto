@@ -135,7 +135,15 @@ async function dispatchTurn(s, role, text) {
   const tabId = role === "CEREBRO" ? s.brainTabId : s.workerTabId;
   const timeoutMs = role === "CEREBRO" ? s.brainTimeoutMs : s.workerTimeoutMs;
   const jobId = crypto.randomUUID();
-  await ensureTabAlive(tabId, role);
+  try {
+    await ensureTabAlive(tabId, role);
+  } catch (error) {
+    // STOP can win while tab validation is awaiting chrome.tabs.get(). If that
+    // validation then rejects (for example, the tab was closed), preserve the
+    // explicit STOPPED state instead of turning the stopped session into ERROR.
+    if (!s.running || s.stopRequested) return;
+    throw error;
+  }
   // STOP may arrive while ensureTabAlive awaits chrome.tabs.get(). Recheck
   // before publishing a new active job, otherwise STOP can leave a stale job
   // in persisted state even though no START_TURN was dispatched.
