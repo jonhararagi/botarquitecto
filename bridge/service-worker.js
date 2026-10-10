@@ -91,7 +91,7 @@ async function finishTurn(s, jobId, ok, role, text, error) {
 }
 
 async function createSession(name) {
-  const s = createSessionObject(name);
+  const s = createSessionModel(name);
   state.sessions.push(s); state.activeSessionId = s.id; await saveState(); return s;
 }
 async function removeSession(id) {
