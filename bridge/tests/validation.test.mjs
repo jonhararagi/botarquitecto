@@ -33,7 +33,7 @@ test("turn completion is bound to the active job and an assigned tab", async () 
   const worker = await workerPromise;
   assert.match(worker, /jobId !== s\.activeJobId/);
   assert.match(worker, /sender\.tab\?\.id !== s\.brainTabId && sender\.tab\?\.id !== s\.workerTabId/);
-  assert.match(worker, /if \(result === s\.lastForwarded\) return failSession\(s, "Respuesta duplicada detectada"\)/);
+  assert.match(worker, /if \(result === s\.lastForwarded\) return failSession\(s, "Respuesta duplicada detectada", token\)/);
 });
 
 test("content script rejects overlapping jobs and waits for a stable new response", async () => {
