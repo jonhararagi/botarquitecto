@@ -184,3 +184,12 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 
 
 - BRIDGE-008 checkpoint: run [38055735149](https://github.com/jonhararagi/botarquitecto/actions/runs/38055735149) volvió a pasar sintaxis, contratos estáticos, suite dinámica y timeout. La integración aún no observó `TURN_COMPLETE`: el reloj se drenaba antes de que la cadena asíncrona inicial programara sus primeros timers. Se añade un vaciado de microtareas antes de avanzar el reloj, conservando timers simulados y sin usar sleeps reales. CI final pendiente.
+
+### BRIDGE-008 — finalización integrada
+- [x] Verificar el contrato actual de identidad `sessionId`/`jobId`/`role` en éxito y error.
+- [x] Verificar autorización del remitente contra la pestaña asignada al rol activo.
+- [x] Ampliar el test integrado para pestaña incorrecta que declara el rol correcto y para `jobId` no vacío en el reporte fallido.
+- [x] Hacer avanzar el reloj simulado por ticks, permitiendo que el polling programe sus temporizadores de forma determinista.
+- [ ] Confirmar suites de regresión y CI sobre el SHA final exacto.
+- [ ] Validar Chrome/Brave real, suspensión MV3 y flujo real antes de declarar producción lista.
+
