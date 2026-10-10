@@ -114,3 +114,7 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Estado provisional:** `PARTIAL` hasta confirmar Actions y revisar cualquier fallo reproducido.
 - **TIMER:** tiempo medido no disponible; estimación restante 30–90 min para CI y reconciliación; 1–3 h para navegador real si está accesible. Estabilización BRIDGE 3–7 días, confianza baja.
 - **Siguiente tarea única:** obtener y revisar CI del SHA final exacto, sin ampliar el alcance a cancelación del content script.
+
+
+- **Checkpoint CI intermedio:** run [38049197793](https://github.com/jonhararagi/botarquitecto/actions/runs/38049197793) falló en `bridge/tests/validation.test.mjs` porque un contrato estático esperaba la llamada antigua a `failSession()` sin token. La sintaxis pasó; las suites dinámicas no se ejecutaron en ese run. Se ajustó el contrato para exigir el token de ejecución. Esto fue un desajuste de la prueba estática tras el cambio de firma, no evidencia de que las pruebas A/B/C fallaran.
+- **Corrección del contrato:** commit `69a29da8b2837f3b495ded81b4cf9941ef05bd98`. CI posterior para el SHA final aún pendiente de consulta; no marcar PASS hasta verificarlo.
