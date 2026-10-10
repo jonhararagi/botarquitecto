@@ -134,15 +134,11 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   const active = (await h.state()).sessions[0];
   const content = await h.getContent(11);
   assert.ok(active.activeJobId);
-  // Avanzar el reloj en pasos, dejando que cada continuación asíncrona programe
-  // el siguiente polling antes de avanzar al siguiente tick simulado.
-  let report;
-  for (let tick = 0; tick < 40 && !report; tick++) {
-    await flush(100);
-    t.mock.timers.tick(250);
-    await flush(100);
-    report = content.messages.find(m => m.type === "TURN_COMPLETE");
-  }
+  // DOM controlado: se deja transcurrir la ventana de estabilidad real (2 s)
+  // del content script. No se conecta a ChatGPT ni se sustituye su lógica.
+  await new Promise(resolve => setTimeout(resolve, 2200));
+  await flush(100);
+  const report = content.messages.find(m => m.type === "TURN_COMPLETE");
   assert.ok(report, "el content script real debe enviar TURN_COMPLETE");
   assert.equal(report.sessionId, h.sessionId);
   assert.equal(report.jobId, active.activeJobId);
