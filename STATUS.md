@@ -1,41 +1,46 @@
 # Estado del proyecto BRIDGE
 
-**Última revisión de referencia:** 2026-10-10  
-**Rama de trabajo:** `main`  
-**HEAD de referencia previo a esta documentación:** `e49419bfb6e29b0bd20e734e01712d291f10e770`  
-**Commit de gobierno inicial:** `f3407963a33c5425c0f89253e38fef92fbef672d`  
-**Estado:** `PARTIAL` · prototipo funcional en evolución; no declarar listo para producción sin pruebas reproducibles.
+**Última inspección:** 2026-10-10 (UTC; consulta de GitHub y CI).  
+**Rama de trabajo:** `worker/bridge-001-validation`  
+**SHA inicial de BRIDGE-001:** `525cf1a5b666a95f1389a26a3f8d3282b17f10fc` (`main` al crear la rama).  
+**SHA de implementación validado por CI:** `11ad7befd54e89196c7e4526da8ff98554187561`.  
+**Estado:** `PARTIAL`. PR #6 abierto; cambios todavía no integrados en `main`.
 
-## Qué existe verificado por inspección estática
+## Estado comprobado
 
-- Extensión Chromium Manifest V3 dentro de `bridge/`.
-- Panel de control, popup, service worker y content script.
-- Sesiones múltiples con asignación de pestañas CEREBRO/OBRERO.
-- Persistencia mediante `chrome.storage.local`.
-- Límites configurables de iteraciones y timeouts.
-- Espera de respuesta estable y comprobación de la acción de copiar respuesta antes de reenviar.
-- Registro de eventos por sesión y estados de ejecución.
+- Extensión Chromium Manifest V3 en `bridge/`, con panel, popup, service worker y content script.
+- Sesiones múltiples, persistencia en `chrome.storage.local`, límites de iteración y timeout, vinculación de turnos por `jobId` y pestaña.
+- Corrección en la rama de trabajo: `createSession()` usa `createSessionModel()`; se eliminó la referencia a la fábrica inexistente `createSessionObject()`.
+- Se añadió una suite Node.js sin dependencias externas que comprueba contratos estáticos críticos y una workflow de GitHub Actions para sintaxis y pruebas.
+- La CI del SHA de implementación terminó con éxito: [run 38025331572](https://github.com/jonhararagi/botarquitecto/actions/runs/38025331572).
 
-## Riesgos y preguntas pendientes
+## Evidencia y límites
 
-1. **Regresión de flujo**: demostrar con pruebas que el ciclo no duplica, salta ni reenvía turnos viejos.
-2. **Ciclo de vida MV3**: validar recuperación tras suspensión/reinicio del service worker y persistencia de sesiones activas.
-3. **Concurrencia**: revisar mensajes tardíos, STOP/PAUSE/RESUME, pestañas compartidas y dos inicios simultáneos.
-4. **Selectores DOM**: ChatGPT puede cambiar su interfaz; deben fallar de forma segura y tener pruebas de contrato.
-5. **Límite de respuesta**: documentar truncamiento y límites de almacenamiento de logs.
-6. **Accesibilidad y UX**: navegación por teclado, foco, estados accesibles, confirmación para operaciones destructivas.
-7. **Validación automatizada**: no se verificó en esta revisión una suite automatizada ni ejecución real de navegador. Estado de pruebas: `NOT_RUN`.
-8. **Publicación**: falta revisar estrategia de empaquetado, instrucciones de instalación/actualización, política de privacidad y licencia del producto.
+- `PASS_STATIC`: inspección de service worker, content script y manifiesto; la suite incluye contratos para creación de sesión, aislamiento de pestañas, límites, asociación de job/remitente y permisos MV3.
+- `PASS_REAL`: GitHub Actions ejecutó y completó con éxito los pasos `node --check` para los cuatro scripts y `node --test bridge/tests/*.test.mjs` en el SHA de implementación indicado.
+- `NOT_RUN`: integración manual en Chrome/Brave, reinicio real del service worker y recorrido completo de dos sesiones.
+- `PARTIAL`: los tests actuales inspeccionan contratos del código; aún no ejercitan dinámicamente las transiciones ni la concurrencia con mocks.
+- `NOT_READY`: no declarar BRIDGE listo para producción.
+
+## Riesgos abiertos
+
+1. Carreras en inicios simultáneos de `START_LOOP` y transiciones de pausa/reanudación/parada.
+2. Respuestas tardías, reinicio/suspensión del service worker y recuperación de estado persistido.
+3. Dependencia de selectores DOM cambiantes de ChatGPT.
+4. La suite no es aún una prueba dinámica del ciclo de sesiones.
+5. No se realizó validación manual en navegador ni revisión de release/privacidad.
 
 ## Métrica de progreso
 
-**Progreso global: 15% (estimación inicial de gestión, confianza baja).** No se incrementa por añadir tests o documentación; revisar tras obtener evidencia de CI y pruebas dinámicas. Es una línea base provisional, no un resultado de pruebas. La cifra solo debe cambiar cuando los hitos de `ROADMAP.md` tengan evidencia. El código existente no equivale a calidad de producción.
+**Progreso global: 15% (estimación de gestión, confianza baja).** No se incrementa por añadir tests contractuales y CI únicamente: falta validar dinámicamente el bucle, la resiliencia MV3, la seguridad y la distribución. El avance de BRIDGE-001 se limita a su base inicial de validación y corrección estática, no a la estabilización total.
 
 ## Próxima tarea única recomendada
 
-**BRIDGE-001: crear una base mínima de validación reproducible**: identificar defectos estáticos del service worker, añadir scripts de validación sin dependencias innecesarias y definir pruebas unitarias para aislamiento de sesiones, límites y transiciones de estado. TIMER: 2–4 h implementación inicial; 1–2 h pruebas y revisión; validación de navegador 30–60 min, sujeta a entorno disponible.
+**BRIDGE-002: añadir pruebas dinámicas de transiciones de estado y concurrencia con mocks de Chrome**, sin automatizar mensajes reales de ChatGPT. Cubrir creación/selección, aislamiento, inicio concurrente, mensajes tardíos y estados PAUSE/RESUME/STOP; separar lógica pura solo donde reduzca acoplamiento y sin duplicar la arquitectura existente.
 
-## Historial de esta revisión
+## TIMER
 
-- Añadido protocolo de dirección técnica en `cerebro/INSTRUCCIONES.md`.
-- Esta línea base debe reconciliarse con el HEAD real de `main` antes del siguiente cambio de código.
+- **Medido por herramienta:** no disponible; no inventar tiempo invertido.
+- **Estimación restante para cerrar BRIDGE-001:** revisión del diff y aprobación/integración del PR: 15–30 min; navegador manual: 30–60 min si Chrome/Brave está disponible.
+- **Estimación restante para estabilizar BRIDGE:** aproximadamente 3–7 días de trabajo concentrado, incluyendo BRIDGE-002, resiliencia MV3, pruebas manuales y revisión de seguridad; confianza baja hasta medir el comportamiento real.
+- **Proyecto completo:** no hay información suficiente para una estimación fiable; distribución, privacidad, accesibilidad y release aún no tienen evidencia de salida.
