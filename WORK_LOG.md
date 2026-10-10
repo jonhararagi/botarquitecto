@@ -109,3 +109,18 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Evidencia:** `PASS_REAL`, [GitHub Actions run 38036355246](https://github.com/jonhararagi/botarquitecto/actions/runs/38036355246), conclusión `success` sobre el SHA exacto. Los siete pasos de sintaxis, contratos estáticos, pruebas dinámicas y timeout con reloj simulado terminaron en `success`.
 - **Alcance:** CI automatizada Node. No prueba Chrome/Brave real, suspensión natural MV3, reinicio del navegador ni polling real tras STOP.
 - **Estado:** BRIDGE-004 sigue `PARTIAL / NOT_READY` hasta ejecutar la validación real descrita en `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md`.
+
+
+## 2026-10-10 — BRIDGE-005 auditoría STOP/cancelación cooperativa (diseño solamente)
+
+- **HEAD BEFORE:** `565beccaee678f2e3a75cc386250b9aa58c4043a`; rama y PR #6 verificados antes de escribir. `main` observado en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR abierto, sin merge.
+- **Commit documental inicial:** `5acc503abf1715b789737cb66d2d3f1284090003`, añade `docs/qa/BRIDGE-005-STOP-CANCELLATION-DESIGN.md`.
+- **Fuentes inspeccionadas:** `bridge/service-worker.js` (hydrate, dispatchTurn, failSession, finishTurn y listeners de START_LOOP/PAUSE/RESUME/STOP/TURN_COMPLETE/tabs.onRemoved), `bridge/content.js` (waitForInput, waitForSendButton, waitForCompletedResponse, sendAndWait, runTurn y listener START_TURN), `bridge/control.js`, `bridge/popup.js`, `bridge/tests/validation.test.mjs`, `bridge/tests/service-worker.dynamic.test.mjs`, `bridge/tests/content.timeout.test.mjs`, `bridge/manifest.json`, workflow, STATUS y ROADMAP.
+- **Diagnóstico estático:** el content script no tiene un handler CANCEL y el polling solo termina por resultado/deadline. STOP invalida el job en el worker pero no notifica a la pestaña. Además, `dispatchTurn()` puede reanudar después de `await ensureTabAlive()` y escribir el job sin revalidar estado; `finishTurn()` también tiene escrituras posteriores a awaits tras su guard inicial. Son riesgos de intercalado demostrados por estructura de código, pendientes de reproducción determinista.
+- **Diseño documentado:** identidad `sessionId + jobId + tabId + role`, cancelación cooperativa idempotente, validación de estado tras awaits, resultados tardíos ignorados, fallos de mensajería marcados como no confirmados y recuperación MV3 conservadora sin replay automático. Incluye tabla de transiciones y 11 casos de prueba con clasificación Node/Chromium.
+- **Cambios de producción/dependencias/permisos:** ninguno. No se cambió la semántica de PAUSE/RESUME/STOP. No se enviaron mensajes reales a ChatGPT.
+- **Evidencia:** `PASS_STATIC` para lectura remota; `PASS_REAL` solo para la CI histórica del SHA de entrada `565beccaee678f2e3a75cc386250b9aa58c4043a` (run 38036415703, success según estado previo del PR); `NOT_RUN` para tests nuevos, ejecución local, navegador real y suspensión natural MV3. La CI histórica no valida este commit documental.
+- **HEAD AFTER inicial:** `5acc503abf1715b789737cb66d2d3f1284090003`; reconciliar HEAD final y CI de la documentación al terminar.
+- **Estado:** `PARTIAL / DESIGN_ONLY`, no listo para producción.
+- **TIMER:** tiempo medido no disponible; auditoría/documentación estimada 2–4 h (confianza media); implementación futura si se autoriza 2–6 h iniciales (confianza baja); estabilización BRIDGE 3–7 días de trabajo concentrado (confianza baja).
+- **Siguiente tarea única:** preparar tests deterministas de los intercalados STOP/dispatchTurn/finishTurn antes de implementar cancelación de producción.
