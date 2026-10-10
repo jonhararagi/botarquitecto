@@ -11,9 +11,9 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 
 ## P1 — Integridad del bucle
 - [ ] Extraer funciones puras para validación de sesiones, límites y transiciones cuando sea viable.
-- [x] Ejecutar en CI la suite dinámica de inicio, finalización, error, pausa, reanudación y parada añadida en BRIDGE-002 (run 38033284641, success).
+- [x] Ejecutar en CI la suite dinámica de inicio, finalización, error, pausa, reanudación y parada añadida en BRIDGE-002 (run 38033318280, success).
 - [ ] Probar que cada respuesta se reenvía como máximo una vez y solo al rol correcto.
-- [ ] Probar respuestas vacías, duplicadas, tardías, timeout y mensajes con marcador.
+- [ ] Completar pruebas de timeout/expiración y respuestas posteriores al timeout; las respuestas vacías, duplicadas y stale job se prueban ya en el arnés.
 - [x] Confirmar en CI el test determinista de START_LOOP concurrentes y reserva de pestañas (run 38033284641, success).
 - [x] Suite de mocks comprueba la competencia por pestañas y aislamiento entre sesiones (run 38033284641, success); queda pendiente validación en navegador real.
 
@@ -53,8 +53,8 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 
 ## BRIDGE-002 — evidencia pendiente de cierre
 
-- [x] GitHub Actions run [38033284641](https://github.com/jonhararagi/botarquitecto/actions/runs/38033284641) terminó en success para el SHA de código `f4805811071ed775eb5a75245c8fa82c4ab71521`.
-- [ ] Mantener pendientes la validación manual en Chrome/Brave y la recuperación tras suspensión/reinicio real del service worker.
+- [x] GitHub Actions run [38033318280](https://github.com/jonhararagi/botarquitecto/actions/runs/38033318280) terminó en success para el head `e1405f1127e05c13260e639f21f1951c896a0fb6`.
+- [ ] Mantener pendientes la validación manual en Chrome/Brave, timeout real del content script y recuperación tras suspensión/reinicio real del service worker.
 - [ ] No declarar producción lista por pasar la suite dinámica de Node.
 
 ## TIMER orientativo
