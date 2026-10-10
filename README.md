@@ -60,6 +60,10 @@ No marques el lanzamiento como GREEN completo mientras los casos obligatorios no
 - El éxito del estado interno no garantiza que la interfaz de ChatGPT haya aceptado o mostrado el mensaje. Verifica también ambas conversaciones.
 - Revisa permisos del manifiesto y cambios de dependencias antes de distribuir la extensión.
 
+## Licencia y reutilización
+
+En la raíz de esta rama no hay un archivo `LICENSE` que declare una licencia para el proyecto. Hasta que el mantenedor elija y añada una licencia explícita, no debe asumirse que terceros tienen permiso para reutilizar o redistribuir el código de este repositorio como software de código abierto. Antes de incorporar código, imágenes, fuentes u otros recursos externos, comprueba su licencia y conserva las atribuciones y avisos requeridos. Esta nota no selecciona una licencia en nombre del mantenedor.
+
 ## Principios de desarrollo
 
 1. **GitHub es la fuente de verdad:** identifica la rama y el SHA exacto antes de validar.
