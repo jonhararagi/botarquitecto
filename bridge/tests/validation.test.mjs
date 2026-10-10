@@ -45,6 +45,8 @@ test("content script rejects overlapping jobs and waits for a stable new respons
   assert.match(content, /current !== beforeText/);
   assert.match(content, /Date\.now\(\) - stableSince >= RESPONSE_STABLE_MS/);
   assert.match(content, /No está disponible la opción «Copiar respuesta»/);
+  assert.ok(content.includes("sessionId: message.sessionId"));
+  assert.ok(content.includes("response?.accepted !== true"));
 });
 
 test("saveState serializes writes, coalesces pending requests, and does not recurse on stale revisions", async () => {

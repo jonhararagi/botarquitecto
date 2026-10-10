@@ -172,3 +172,6 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - Suite integrada añadida al workflow para éxito, fallo DOM controlado, identidad inválida/duplicada y respuesta posterior a STOP. Resultado definitivo pendiente de CI del SHA final exacto.
 - Chromium/Brave real, suspensión natural MV3 y cancelación cooperativa: `NOT_RUN`; BRIDGE sigue `PARTIAL / NOT_READY` hasta validar navegador real.
 - TIMER: tiempo medido no disponible; 2–5 h estimadas para esta tarea, 1–2 h adicionales para navegador real; estabilización BRIDGE 3–7 días, confianza baja.
+
+
+- BRIDGE-008 checkpoint: run [38055411681](https://github.com/jonhararagi/botarquitecto/actions/runs/38055411681) falló en sintaxis de la suite estática por una expresión regular mal escapada; no ejecutó suites dinámicas. Corregida la aserción para usar comprobaciones literales. Se actualizan expectativas previas para que jobs antiguos sean rechazados explícitamente, y se amplía D para comprobar que un job nuevo permanece intacto frente a una respuesta del job anterior. CI posterior pendiente.

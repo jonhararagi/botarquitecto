@@ -272,7 +272,7 @@ test("rechaza remitente no autorizado y descarta job antiguo o de otra sesión",
   const unauthorized = await complete(h, s, { jobId: s.activeJobId, senderTab: 33 });
   assert.equal(unauthorized.ok, false);
   const stale = await complete(h, s, { jobId: "job-antiguo" });
-  assert.equal(stale.ok, true);
+  assert.equal(stale.ok, false, "un job obsoleto debe rechazarse explícitamente");
   assert.equal((await h.state()).sessions.find(x => x.id === id).iteration, 0);
   const wrongSession = await h.call({ type: "TURN_COMPLETE", sessionId: other, jobId: s.activeJobId, role: "CEREBRO", text: "no" }, { tab: { id: 11 } });
   assert.equal(wrongSession.ok, false, "una sesión distinta no debe aceptar la pestaña de la sesión original");

@@ -180,4 +180,19 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   assert.equal(afterStop.status, "STOPPED");
   assert.equal(afterStop.running, false);
   assert.equal(afterStop.activeJobId, null);
+
+  stoppedHarness.contents.delete(11);
+  const restarted = await stoppedHarness.call({ type: "START_LOOP", sessionId: stoppedHarness.sessionId,
+    brainTabId: 11, workerTabId: 22, seed: "nuevo trabajo", maxIterations: 1 });
+  assert.equal(restarted.ok, true, restarted.error);
+  const newState = (await stoppedHarness.state()).sessions[0];
+  assert.ok(newState.activeJobId);
+  assert.notEqual(newState.activeJobId, beforeStop.activeJobId);
+  const oldAfterRestart = await stoppedHarness.call({ type: "TURN_COMPLETE", sessionId: stoppedHarness.sessionId,
+    jobId: beforeStop.activeJobId, role: "CEREBRO", ok: true, text: "antiguo tras reinicio" }, { tab: { id: 11 } });
+  assert.equal(oldAfterRestart.ok, false);
+  const preserved = (await stoppedHarness.state()).sessions[0];
+  assert.equal(preserved.activeJobId, newState.activeJobId);
+  assert.equal(preserved.iteration, 0);
+  assert.equal(preserved.running, true);
 });
