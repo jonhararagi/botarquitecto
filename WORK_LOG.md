@@ -30,3 +30,16 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **TIMER restante estimado:** 15–30 min para revisión del diff/PR; 30–60 min para validación manual en Chrome/Brave si disponible. No hay cronómetro de tiempo invertido.
 - **Siguiente tarea única:** BRIDGE-002, pruebas dinámicas de transiciones de estado y concurrencia con mocks, sin automatizar mensajes reales de ChatGPT.
 
+## 2026-10-10 — BRIDGE-002 dynamic service-worker harness (en progreso)
+
+- **HEAD BEFORE:** `529b840e5a6f7d4848786a393432a465666015ef` (head de PR #6 inspeccionado al inicio).
+- **Objetivo:** ejecutar la lógica real de `bridge/service-worker.js` bajo Node.js con mocks controlables de Chrome; no enviar mensajes reales a ChatGPT.
+- **Archivos modificados:** `bridge/tests/service-worker.dynamic.test.mjs` (nuevo), `.github/workflows/bridge-validation.yml`, `README.md`, `STATUS.md`, `ROADMAP.md` y este registro.
+- **Suite dinámica añadida:** inicialización/hidratación, creación/selección/eliminación, límites, START_LOOP válido e inválido, competencia concurrente determinista por pestañas, job/remitente, respuestas obsoletas, vacías, errores y duplicadas, PAUSE/RESUME/STOP, maxIterations, rechazo de sendMessage y tabs.onRemoved.
+- **Concurrencia:** la prueba mantiene bloqueada de forma determinista la primera llamada simulada a `tabs.sendMessage` después de que la sesión marque `running`; intenta iniciar la segunda sesión con las mismas pestañas y exige su rechazo antes de liberar la primera llamada. No se afirma una carrera no reproducida.
+- **Correcciones de producción:** ninguna aplicada todavía; los casos actuales no justifican modificar la máquina de estados sin evidencia de una regresión.
+- **Comandos declarados para CI:** `node --check` de los cuatro scripts; `node --test bridge/tests/validation.test.mjs`; `node --test bridge/tests/service-worker.dynamic.test.mjs`. No se ha ejecutado localmente en este entorno.
+- **Evidencia actual:** `PASS_STATIC` inspección de los archivos y del harness. `NOT_RUN` resultado de CI para el nuevo SHA: la consulta de estados/runs aún no devuelve evidencia; no declarar la suite dinámica como PASS_REAL hasta verificar el run. `NOT_RUN` Chrome/Brave manual, suspensión/reinicio real del service worker.
+- **Commits BRIDGE-002 observados:** `f06bcc46b71cdee4a234739aeda0fdc19cd025b3` (suite inicial), `4138085f65b93c35fd1f90092c3e59f99ef3ef47` (CI separa contratos y dinámica), `98dd2610512424a3328884fa7d67eb28fe419ffc` (README), `3a77fe98b3a1112f159e245c20c7f7ebc3bb947b` (STATUS), `11d4fff2a26f2fb9800b570f6fbe115606538cf5` (concurrencia determinista), `ada0c7fe780e4638ebd90941ceacf5612932c9b9` (aislamiento de hidratación inicial) y `b3b6d5386d868d4360f225c7b62fb7d85b8c8160` (ROADMAP).
+- **Limitaciones:** el VM no reproduce el ciclo de vida del service worker Chromium, timers reales ni DOM de ChatGPT. La expiración/timeout del content script no se prueba como timeout real; tampoco la respuesta recibida tras una expiración real. La prueba de pestaña cerrada sí invoca el listener de `tabs.onRemoved`.
+- **TIMER:** tiempo invertido medido no disponible. Estimación restante 1–2 h para validar CI, corregir fallos y reconciliar documentación, más 30–60 min para navegador manual si está disponible.
