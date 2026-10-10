@@ -21,11 +21,12 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 
 - **HEAD BEFORE:** `525cf1a5b666a95f1389a26a3f8d3282b17f10fc` (main snapshot used to create branch).
 - **Branch:** `worker/bridge-001-validation`.
-- **Cambios:** `bridge/tests/validation.test.mjs`, `.github/workflows/bridge-validation.yml`, corrección de `createSessionObject()` inexistente a `createSessionModel()` en `bridge/service-worker.js`; estado y roadmap actualizados.
+- **Cambios de código:** `bridge/tests/validation.test.mjs`, `.github/workflows/bridge-validation.yml`, corrección de `createSessionObject()` inexistente a `createSessionModel()` en `bridge/service-worker.js`.
 - **Objetivo:** establecer validación reproducible sin dependencias externas y detectar regresiones contractuales clave.
-- **Evidencia:** `PASS_STATIC` inspección de fuentes y manifiesto. `PASS_REAL` CI GitHub Actions, run [38025305570](https://github.com/jonhararagi/botarquitecto/actions/runs/38025305570), conclusión `success`; pasos de sintaxis y pruebas de contrato completados. `NOT_RUN` prueba manual de navegador.
-- **Limitaciones:** los tests actuales comprueban contratos mediante inspección de código; no ejecutan todavía el bucle de sesiones con mocks ni verifican concurrencia en un navegador real.
+- **Evidencia:** `PASS_STATIC` inspección de fuentes y manifiesto. `PASS_REAL` GitHub Actions run [38025331572](https://github.com/jonhararagi/botarquitecto/actions/runs/38025331572), conclusión `success`; los pasos de sintaxis y pruebas de contrato terminaron con éxito en SHA `11ad7befd54e89196c7e4526da8ff98554187561`. `NOT_RUN` prueba manual de navegador.
+- **Documentación de seguimiento:** `STATUS.md` reconciliado con la evidencia y los riesgos actuales; `README.md` documenta los comandos reproducibles; `ROADMAP.md` marca únicamente la suite inicial y CI como completadas. Commits de sincronización: `5d572658bc9e3d7ecc633ffa958de5ecec9e8a28` y `3ce83d1d11049344085fecddf16f565a577fd117`.
+- **Limitaciones:** los tests actuales comprueban contratos mediante inspección de código; no ejecutan todavía el bucle de sesiones con mocks ni verifican concurrencia real en navegador. El PR #6 continúa abierto y no está integrado en `main`.
 - **Licencias/activos:** no se incorporaron materiales externos ni dependencias.
-- **TIMER restante:** 20–45 min revisar CI/diff; 30–60 min validación manual de navegador si disponible.
-- **Siguiente tarea única:** BRIDGE-002: diseñar pruebas dinámicas de transiciones de estado y concurrencia con mocks, conservando los límites de seguridad.
+- **TIMER restante estimado:** 15–30 min para revisión del diff/PR; 30–60 min para validación manual en Chrome/Brave si disponible. No hay cronómetro de tiempo invertido.
+- **Siguiente tarea única:** BRIDGE-002, pruebas dinámicas de transiciones de estado y concurrencia con mocks, sin automatizar mensajes reales de ChatGPT.
 
