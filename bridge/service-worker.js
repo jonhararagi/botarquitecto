@@ -31,7 +31,12 @@ async function hydrate() {
   for (const s of state.sessions) {
     if (!s || typeof s !== "object") continue;
     if (!Array.isArray(s.log)) s.log = [];
-    if (s.running === true || s.activeJobId) {
+    if (s.running === true && s.paused === true && !s.activeJobId) {
+      // A paused session with no pending job can safely remain paused.
+      s.running = false;
+      s.activeRole = null;
+      s.status = "PAUSED — Recuperada tras reinicio; pulsa RESUME para continuar.";
+    } else if (s.running === true || s.activeJobId) {
       s.running = false;
       s.activeJobId = null;
       s.activeRole = null;
