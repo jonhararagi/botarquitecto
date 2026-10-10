@@ -172,8 +172,10 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   const failed = failedContent.messages.find(m => m.type === "TURN_COMPLETE");
   assert.ok(failed);
   assert.equal(failed.sessionId, bad.sessionId);
-  assert.equal(typeof failed.jobId, "string");
-  assert.ok(failed.jobId.length > 0, "el error conserva el jobId original");
+  const failedStart = bad.starts.find(item => item.message.type === "START_TURN");
+  assert.ok(failedStart, "el worker debe haber emitido START_TURN para el caso fallido");
+  assert.equal(failed.jobId, failedStart.message.jobId, "el error conserva exactamente el jobId original");
+  assert.equal(failed.sessionId, failedStart.message.sessionId, "el error conserva la sesión de START_TURN");
   assert.equal(failed.role, "CEREBRO");
   assert.equal(failed.ok, false);
   assert.match(failed.error, /DOM integrado controlado/);
