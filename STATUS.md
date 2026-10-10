@@ -187,3 +187,15 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - La prueba integrada ahora ejecuta el content script real con un DOM simulado **sin botón de copiar**, y verifica que informe correctamente el texto. Sintaxis, contratos estáticos, pruebas dinámicas del worker, timeout e integración pasaron.
 - **Validación Chrome/Brave real:** `NOT_RUN` tras el parche. La confirmación de funcionamiento en el perfil de usuario sigue pendiente; CI no demuestra por sí sola compatibilidad con el DOM actual de ChatGPT.
 - **Siguiente tarea única:** actualizar la copia local con el commit revisado y repetir una prueba manual controlada en Chrome. No fusionar PR #6 ni cambiar `main` como parte de esta tarea.
+
+
+## 2026-10-10 — BRIDGE-011: preservar todos los campos de configuración
+
+- **HEAD de código:** `6254a563f5b1de0f6b0fee10da3a7c8358c8f285`.
+- **CI de código:** [run 38062133811](https://github.com/jonhararagi/botarquitecto/actions/runs/38062133811), `success` sobre el SHA exacto.
+- El refresco del panel cada 700 ms ya no sobrescribe borradores de nombre de sesión, Iteraciones, timeout CEREBRO, timeout OBRERO ni espera mínima. Todos los campos guardan su propio estado de edición; tras guardar, la interfaz se reconcilia con los valores persistidos/normalizados.
+- Nueva regresión dinámica en `bridge/tests/control.iterations.test.mjs`: establece Iteraciones=2, CEREBRO=45 s, OBRERO=60 s, espera mínima=3 s y nombre personalizado; fuerza un refresco durante la edición y verifica que `SAVE_SESSION` y `START_LOOP` reciben exactamente esos valores (timeout OBRERO = 60000 ms, no 600000 ms).
+- La suite estática también verifica que cada campo editable esté protegido. Las pruebas de sintaxis, contratos estáticos, service worker dinámico, timeout del content script, panel y test integrado pasan.
+- **Chrome/Brave real:** `NOT_RUN`. Falta confirmar el resultado en el navegador del usuario después de sincronizar/recargar. No se declara validación E2E por el solo hecho de pasar CI.
+- **Siguiente tarea única:** actualizar la copia local con el HEAD documental final y ejecutar una prueba manual limitada. PR #6 permanece abierto, sin merge; `main` no se modificó.
+- **TIMER:** arreglos y pruebas automatizadas 30–60 min estimados; actualización local 5–10 min; validación manual E2E 15–30 min si ChatGPT conserva los selectores esperados. El tiempo medido no está disponible.

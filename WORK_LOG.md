@@ -226,3 +226,16 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Evidencia CI para el commit de código:** [run 38061367991](https://github.com/jonhararagi/botarquitecto/actions/runs/38061367991), `success`, SHA exacto `bd2afa070f76c105c2ed50e0f9f28dc21cffbd5f`. Syntax, static contracts, dynamic service-worker tests, content timeout, UI iteration regression and integrated turn-completion test all passed.
 - **Chrome/Brave real:** `NOT_RUN`. Aún debe ejecutarse la prueba manual con el perfil local; no se afirma que el handoff real ya esté validado. No se creó ni integró un cambio en `main`; PR #6 continúa abierto.
 - **TIMER:** parche y pruebas automatizadas completados, aprox. 1–2 h de trabajo técnico. Restan 10–20 min para sincronizar la copia local y 15–30 min para la validación manual de Chrome, sujeto a la disponibilidad actual del DOM de ChatGPT.
+
+
+## 2026-10-10 — BRIDGE-011 · los campos de configuración se sobrescribían por polling
+
+- **HEAD BEFORE:** `48a7b4c86fc12c398ea91be243056fe5ddec9123`.
+- **Commit de código:** `6254a563f5b1de0f6b0fee10da3a7c8358c8f285`.
+- **Archivos:** `bridge/control.js`, `bridge/tests/control.iterations.test.mjs`, `bridge/tests/validation.test.mjs`.
+- **Causa:** el panel consulta estado cada 700 ms. BRIDGE-010 había protegido Iteraciones, pero `brainTimeout`, `workerTimeout`, `minTurnDelay` y `sessionName` todavía se reescribían en `render()`; por eso el timeout de OBRERO regresaba a 600 segundos.
+- **Corrección:** se agregaron banderas `dirty` independientes para todos los campos editables; el refresco no pisa el borrador mientras se edita, los cambios de sesión limpian esos estados y un guardado correcto reconcilia cada campo con el valor persistido.
+- **Regresión dinámica:** la prueba simula polling con cambios locales y exige que CEREBRO=45 s, OBRERO=60 s, espera mínima=3 s, Iteraciones=2 y el nombre modificado sobrevivan hasta guardar; valida los mensajes reales que la UI arma para `SAVE_SESSION` y `START_LOOP`. OBRERO debe viajar como `60000` ms.
+- **CI:** [run 38062133811](https://github.com/jonhararagi/botarquitecto/actions/runs/38062133811), `success` en el SHA exacto `6254a563f5b1de0f6b0fee10da3a7c8358c8f285`. Sintaxis, contratos estáticos, pruebas dinámicas, timeout, panel y test integrado completaron correctamente.
+- **Límite:** CI ejecuta las suites en Node con mocks y no confirma aún el comportamiento del perfil real de Chrome. Prueba manual final sigue `NOT_RUN`; no modificar `main` ni fusionar PR #6.
+- **TIMER:** cambios y pruebas automatizadas aprox. 30–60 min de trabajo técnico; quedan sincronización local y 15–30 min de prueba E2E manual. El tiempo medido no está disponible.
