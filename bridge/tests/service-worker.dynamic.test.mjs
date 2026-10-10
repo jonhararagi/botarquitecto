@@ -13,7 +13,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function makeHarness({ savedState, sendMessage } = {}) {
+function makeHarness({ savedState, sendMessage, getTab, setStorage } = {}) {
   const listeners = { message: null, removed: null, clicked: null };
   const tabs = new Map([
     [11, { id: 11, url: "https://chatgpt.com/", title: "Brain", windowId: 1 }],
@@ -28,7 +28,11 @@ function makeHarness({ savedState, sendMessage } = {}) {
     async get(key) {
       return Object.prototype.hasOwnProperty.call(stored, key) ? { [key]: structuredClone(stored[key]) } : {};
     },
-    async set(value) { stored = { ...stored, ...structuredClone(value) }; initialSaved.resolve(); }
+    async set(value) {
+      if (setStorage) await setStorage(structuredClone(value), next => { stored = { ...stored, ...structuredClone(next) }; });
+      else stored = { ...stored, ...structuredClone(value) };
+      initialSaved.resolve();
+    }
   };
   const chrome = {
     storage: { local: storage },
@@ -40,6 +44,7 @@ function makeHarness({ savedState, sendMessage } = {}) {
       onRemoved: { addListener(fn) { listeners.removed = fn; } },
       async query() { return [...tabs.values()].map(t => ({ ...t })); },
       async get(id) {
+        if (getTab) return getTab(id, tabs);
         if (!tabs.has(id)) throw new Error("No tab with id " + id);
         return { ...tabs.get(id) };
       },
@@ -579,4 +584,118 @@ test("la hidratación repara sesiones incompletas sin romper el resto del almace
   assert.equal(repaired.activeJobId, null);
   assert.match(repaired.status, /ERROR.*ambiguo/);
   assert.equal(h.persisted().bridgeStateV5.activeSessionId, "sana");
+});
+
+
+test("STOP durante tabs.get invalida dispatchTurn y una excepción tardía no reemplaza STOPPED", async () => {
+  const entered = deferred();
+  const release = deferred();
+  const h = await newHarness({ getTab: async (id, tabs) => {
+    entered.resolve();
+    await release.promise;
+    if (!tabs.has(id)) throw new Error("pestaña desaparecida después de STOP");
+    return { ...tabs.get(id) };
+  } });
+  const id = (await h.state()).sessions[0].id;
+  const starting = start(h, id);
+  await entered.promise;
+  const stop = await h.call({ type: "STOP", sessionId: id });
+  assert.equal(stop.ok, true);
+  assert.equal(stop.state.sessions[0].status, "STOPPED");
+  assert.equal(stop.state.sessions[0].running, false);
+  assert.equal(stop.state.sessions[0].stopRequested, true);
+  h.tabs.delete(11);
+  release.resolve();
+  await starting;
+  const s = (await h.state()).sessions[0];
+  assert.equal(s.status, "STOPPED");
+  assert.equal(s.running, false);
+  assert.equal(s.stopRequested, true);
+  assert.equal(s.activeJobId, null);
+  assert.equal(s.activeRole, null);
+  assert.equal(h.sent.length, 0, "la continuación invalidada no debe enviar START_TURN");
+});
+
+test("STOP mientras finishTurn espera persistencia no avanza iteration ni lastForwarded ni despacha", async () => {
+  const entered = deferred();
+  const release = deferred();
+  let holdResult = false;
+  const h = await newHarness({ setStorage: async (value, defaultSet) => {
+    const sessions = value.bridgeStateV5?.sessions || [];
+    const isResultWrite = sessions.some(s => s.log?.some(row => row.role === "CEREBRO" && row.text === "resultado bajo barrera"));
+    if (holdResult && isResultWrite) {
+      holdResult = false;
+      entered.resolve();
+      await release.promise;
+    }
+    defaultSet(value);
+  } });
+  const id = (await h.state()).sessions[0].id;
+  await start(h, id);
+  const active = (await h.state()).sessions[0];
+  const originalLastForwarded = active.lastForwarded;
+  holdResult = true;
+  const completing = complete(h, active, { jobId: active.activeJobId, text: "resultado bajo barrera" });
+  await entered.promise;
+  const stopped = await h.call({ type: "STOP", sessionId: id });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.state.sessions[0].status, "STOPPED");
+  assert.equal(stopped.state.sessions[0].running, false);
+  release.resolve();
+  await completing;
+  const after = (await h.state()).sessions[0];
+  assert.equal(after.status, "STOPPED");
+  assert.equal(after.running, false);
+  assert.equal(after.stopRequested, true);
+  assert.equal(after.iteration, 0);
+  assert.equal(after.lastForwarded, originalLastForwarded);
+  assert.equal(after.activeJobId, null);
+  assert.equal(after.activeRole, null);
+  assert.equal(h.sent.length, 1, "la respuesta antigua no debe despachar el siguiente turno");
+  assert.equal(h.persisted().bridgeStateV5.sessions[0].status, "STOPPED", "una escritura antigua no debe ganar la persistencia final");
+});
+
+test("STOP y START nuevo mientras dispatchTurn antiguo espera: no hay ABA ni envío del trabajo A", async () => {
+  const firstEntered = deferred();
+  const secondEntered = deferred();
+  const releaseA = deferred();
+  const releaseB = deferred();
+  let calls = 0;
+  const h = await newHarness({ getTab: async (id, tabs) => {
+    calls++;
+    const thisCall = calls;
+    if (thisCall === 1) { firstEntered.resolve(); await releaseA.promise; }
+    else if (thisCall === 2) { secondEntered.resolve(); await releaseB.promise; }
+    if (!tabs.has(id)) throw new Error("pestaña inexistente");
+    return { ...tabs.get(id) };
+  } });
+  const id = (await h.state()).sessions[0].id;
+  const startA = start(h, id, { seed: "trabajo A" });
+  await firstEntered.promise;
+  const stop = await h.call({ type: "STOP", sessionId: id });
+  assert.equal(stop.state.sessions[0].status, "STOPPED");
+  const startB = start(h, id, { seed: "trabajo B" });
+  await secondEntered.promise;
+  releaseB.resolve();
+  const startBResult = await startB;
+  assert.equal(startBResult.ok, true, startBResult.error);
+  const stateB = (await h.state()).sessions[0];
+  const jobB = stateB.activeJobId;
+  assert.ok(jobB);
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.sent[0].message.text, "trabajo B");
+  releaseA.resolve();
+  await startA;
+  const afterA = (await h.state()).sessions[0];
+  assert.equal(afterA.status, stateB.status);
+  assert.equal(afterA.activeJobId, jobB);
+  assert.equal(afterA.activeRole, "CEREBRO");
+  assert.equal(afterA.running, true);
+  assert.equal(afterA.stopRequested, false);
+  assert.equal(h.sent.length, 1, "A no puede enviar después de perder autoridad");
+  await complete(h, afterA, { jobId: "job-A-obsoleto", text: "respuesta A tardía" });
+  const afterStale = (await h.state()).sessions[0];
+  assert.equal(afterStale.activeJobId, jobB);
+  assert.equal(afterStale.iteration, 0);
+  assert.equal(h.sent.length, 1);
 });
