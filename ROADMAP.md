@@ -11,11 +11,11 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 
 ## P1 — Integridad del bucle
 - [ ] Extraer funciones puras para validación de sesiones, límites y transiciones cuando sea viable.
-- [ ] Cubrir inicio, finalización, error, pausa, reanudación y parada.
+- [ ] Verificar en CI la suite dinámica de inicio, finalización, error, pausa, reanudación y parada añadida en BRIDGE-002.
 - [ ] Probar que cada respuesta se reenvía como máximo una vez y solo al rol correcto.
 - [ ] Probar respuestas vacías, duplicadas, tardías, timeout y mensajes con marcador.
-- [ ] Revisar carrera entre START_LOOP simultáneos y asignación de pestañas.
-- [ ] Garantizar que una sesión nunca envía a una pestaña asignada a otra sesión activa.
+- [ ] Confirmar con CI el test determinista de START_LOOP concurrentes y reserva de pestañas.
+- [ ] Completar la evidencia de aislamiento entre sesiones; los mocks nuevos comprueban la competencia por pestañas, pendiente de CI.
 
 ## P2 — Resiliencia Manifest V3
 - [ ] Definir qué ocurre al suspender/reiniciar service worker durante un turno.
@@ -50,6 +50,12 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 3. Sin afirmar validación real si solo se hizo revisión estática.
 4. Documentación y estado actualizados en el mismo ciclo.
 5. Riesgos conocidos anotados y siguiente tarea única definida.
+
+## BRIDGE-002 — evidencia pendiente de cierre
+
+- [ ] Confirmar resultado verde de GitHub Actions para el SHA final de la rama.
+- [ ] Mantener pendientes la validación manual en Chrome/Brave y la recuperación tras suspensión/reinicio real del service worker.
+- [ ] No declarar producción lista por pasar la suite dinámica de Node.
 
 ## TIMER orientativo
 - P0 automatización mínima: 2–4 h de implementación inicial + 1–2 h de pruebas.
