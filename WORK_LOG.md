@@ -208,3 +208,8 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Limitaciones:** Chrome/Brave real, suspensión natural MV3 y cancelación cooperativa continúan `NOT RUN`.
 - **TIMER:** tiempo medido no disponible. Trabajo estimado 2–5 h, validación manual 1–2 h adicionales; estabilización BRIDGE restante 3–7 días de trabajo concentrado, confianza baja.
 
+### BRIDGE-008 — verificación CI completada
+- **SHA de código verificado:** `a9bb330b0a72b054267da82729c61c8538378a29`.
+- **GitHub Actions:** [run 38056070845](https://github.com/jonhararagi/botarquitecto/actions/runs/38056070845), conclusión `success` sobre ese SHA exacto.
+- Pasaron sintaxis JavaScript, contratos estáticos, pruebas dinámicas del service worker, timeout del content script y test integrado content script + service worker.
+- No se ejecutaron comandos Node localmente mediante esta sesión. La validación Chrome/Brave real sigue `NOT RUN`; no declarar producción lista.
