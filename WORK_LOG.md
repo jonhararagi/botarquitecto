@@ -165,3 +165,12 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Evidencia CI:** pendiente de consultar el run asociado al SHA final de este cambio documental. No declarar PASS hasta confirmar la conclusión y el SHA exacto en Actions.
 - **TIMER:** tiempo medido no disponible. Estimación restante para CI, correcciones y reconciliación: 30–90 min; Chrome/Brave manual: 1–2 h si hay navegador disponible. Estabilización BRIDGE estimada: 3–7 días concentrados, confianza baja.
 - **Siguiente tarea única:** revisar la CI sobre el SHA final y corregir únicamente cualquier fallo reproducido por esa suite; después, validar el protocolo manual MV3 en Chrome/Brave real.
+
+
+### BRIDGE-007 — regresión corregida y CI del código
+
+- **Primera ejecución:** [run 38050753968](https://github.com/jonhararagi/botarquitecto/actions/runs/38050753968) detectó que la prueba BRIDGE-006 esperaba una escritura STOP paralela y quedaba bloqueada con la nueva cola serializada. Se adaptó la prueba para observar el estado en memoria, liberar la barrera y esperar las dos operaciones.
+- **Segunda ejecución:** [run 38050849619](https://github.com/jonhararagi/botarquitecto/actions/runs/38050849619) mostró dos expectativas incorrectas en los nuevos casos: las sesiones de prueba no estaban activas, por lo que PAUSE conservaba `IDLE`. Se cambió la preparación para iniciar cada sesión antes de armar el mock de storage.
+- **CI de código exitosa:** [run 38050951438](https://github.com/jonhararagi/botarquitecto/actions/runs/38050951438), conclusión `success`, SHA exacto `039e00987e3e3323e3af0a1fe9002f6790bf2e8a`. Pasaron sintaxis de JS, contratos estáticos, suite dinámica del worker real bajo Node VM con mocks de Chrome y timeout real del content script con reloj simulado.
+- **Comandos cubiertos por el workflow:** `node --check bridge/service-worker.js`, `node --check bridge/content.js`, `node --check bridge/control.js`, `node --check bridge/popup.js`, `node --test bridge/tests/validation.test.mjs`, `node --test bridge/tests/service-worker.dynamic.test.mjs`, `node --test bridge/tests/content.timeout.test.mjs`. Se ejecutaron en GitHub Actions, no localmente.
+- **Importante:** el SHA de CI anterior valida el código y las pruebas. Esta actualización documental produce un SHA posterior; consultar Actions sobre el HEAD final antes de cerrar BRIDGE-007.
