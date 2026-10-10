@@ -183,7 +183,13 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
 
   // D: STOP seguido de una finalización tardía no reactiva la sesión.
   const stoppedHarness = await harness("success");
-  const beforeStop = (await stoppedHarness.state()).sessions[0];
+  let beforeStop;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await flush(40);
+    beforeStop = (await stoppedHarness.state()).sessions[0];
+    if (beforeStop.activeJobId) break;
+  }
+  assert.ok(beforeStop.activeJobId, "el trabajo inicial debe despacharse antes de STOP");
   await stoppedHarness.call({ type: "STOP", sessionId: stoppedHarness.sessionId });
   const late = await stoppedHarness.call({ type: "TURN_COMPLETE", sessionId: stoppedHarness.sessionId,
     jobId: beforeStop.activeJobId, role: "CEREBRO", ok: true, text: "tardío" }, { tab: { id: 11 } });
@@ -197,8 +203,13 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   const restarted = await stoppedHarness.call({ type: "START_LOOP", sessionId: stoppedHarness.sessionId,
     brainTabId: 11, workerTabId: 22, seed: "nuevo trabajo", maxIterations: 1 });
   assert.equal(restarted.ok, true, restarted.error);
-  const newState = (await stoppedHarness.state()).sessions[0];
-  assert.ok(newState.activeJobId);
+  let newState;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await flush(40);
+    newState = (await stoppedHarness.state()).sessions[0];
+    if (newState.activeJobId) break;
+  }
+  assert.ok(newState.activeJobId, "el nuevo trabajo debe quedar activo antes de probar la respuesta antigua");
   assert.notEqual(newState.activeJobId, beforeStop.activeJobId);
   const oldAfterRestart = await stoppedHarness.call({ type: "TURN_COMPLETE", sessionId: stoppedHarness.sessionId,
     jobId: beforeStop.activeJobId, role: "CEREBRO", ok: true, text: "antiguo tras reinicio" }, { tab: { id: 11 } });
