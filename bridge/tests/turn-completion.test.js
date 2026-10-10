@@ -413,6 +413,48 @@ test("STOP racing with START_TURN acknowledgement sends a cancellation after the
   assert.equal(finalSession.activeJobId, null);
 });
 
+test("late START_TURN rejection after STOP does not overwrite STOPPED with ERROR", async () => {
+  let enteredResolve;
+  let releaseResolve;
+  const enteredStart = new Promise(resolve => { enteredResolve = resolve; });
+  const releaseStart = new Promise(resolve => { releaseResolve = resolve; });
+  const worker = await readyWorker({
+    async beforeSendMessage(tabId, message) {
+      if (message.type === "START_TURN") {
+        enteredResolve();
+        await releaseStart;
+        throw new Error("late start acknowledgement failure");
+      }
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const startPromise = send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "STOP before failed acknowledgement", maxIterations: 10,
+    brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+
+  await enteredStart;
+  const stopped = await send(worker.listeners, { type: "STOP", sessionId: session.id });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.state.sessions.find(item => item.id === session.id).status, "STOPPED");
+
+  releaseResolve();
+  const startResult = await startPromise;
+  assert.equal(startResult.ok, true);
+
+  const finalState = await send(worker.listeners, { type: "GET_STATE" });
+  const finalSession = finalState.state.sessions.find(item => item.id === session.id);
+  assert.equal(finalSession.status, "STOPPED");
+  assert.equal(finalSession.running, false);
+  assert.equal(finalSession.activeJobId, null);
+  assert.equal(finalSession.activeRole, null);
+  assert.equal(worker.sent.some(item => item.message.type === "CANCEL_TURN"), true);
+});
+
+
 test("control dashboard exposes intuitive session metrics and safe controls", () => {
   const html = fs.readFileSync(path.join(root, "control.html"), "utf8");
   const script = fs.readFileSync(path.join(root, "control.js"), "utf8");
