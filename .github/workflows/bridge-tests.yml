@@ -1,0 +1,29 @@
+name: BRIDGE regression tests
+
+on:
+  push:
+    branches:
+      - main
+      - recovery/**
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    name: test (Node ${{ matrix.node-version }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Run regression tests
+        run: node --check control.js && node --check popup.js && node --check service-worker.js && node --check content.js && npm test
+        working-directory: bridge

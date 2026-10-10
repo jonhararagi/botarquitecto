@@ -1,1 +1,97 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BRIDGE</title><style>body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#111;color:#eee}main{max-width:760px;margin:auto}h1{margin:0 0 8px}label{display:block;margin:10px 0 5px;font-weight:600}select,textarea,input,button{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #444;background:#1b1b1b;color:#eee}textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}button{cursor:pointer}.primary{margin-top:10px}button:disabled,select:disabled,input:disabled{opacity:.55}#status{padding:10px;border-radius:8px;background:#1b1b1b;margin:10px 0}#log{height:320px;overflow:auto;padding:10px;border:1px solid #333;border-radius:10px;background:#0b0b0b}.msg{padding:10px;margin:8px 0;border-radius:10px;white-space:pre-wrap;word-break:break-word}.brain{background:#18243a;border-left:4px solid #5b8cff}.worker{background:#1d3021;border-left:4px solid #5dcc72}.system{background:#242424;border-left:4px solid #888;color:#bbb}.who{font-weight:700;margin-bottom:4px}small{opacity:.72}.hint{padding:8px;border:1px solid #333;border-radius:8px;margin:8px 0}</style></head><body><main><h1>BRIDGE</h1><div class="hint"><b>Multi-sesión:</b> cada sesión conserva su propio CEREBRO ↔ OBRERO. Puedes ejecutar varias sesiones a la vez dentro de este perfil.</div><p id="status">IDLE</p><label for="session">Sesión</label><div class="row"><select id="session"></select><button id="newSession">＋ Nueva</button><button id="deleteSession">Eliminar</button></div><label for="sessionName">Nombre</label><input id="sessionName" placeholder="Cuenta 1 / Proyecto A"><label for="brain">CEREBRO</label><select id="brain"></select><label for="worker">OBRERO</label><select id="worker"></select><label for="seed">Mensaje inicial</label><textarea id="seed" placeholder="Escribe el primer mensaje que recibirá CEREBRO..."></textarea><label>Conversación</label><div id="log"></div><div class="row"><div><label for="iterations">Iteraciones</label><input id="iterations" type="number" min="1" max="100" value="10"></div><div><label for="brainTimeout">Timeout CEREBRO (seg.)</label><input id="brainTimeout" type="number" min="5" max="1800" value="60"></div></div><div class="row"><div><label for="workerTimeout">Timeout OBRERO (seg.)</label><input id="workerTimeout" type="number" min="5" max="1800" value="600"></div><div><label for="minTurnDelay">Espera mínima (seg.)</label><input id="minTurnDelay" type="number" min="0" max="60" value="0"></div></div><div class="row primary"><button id="refresh">Actualizar pestañas</button><button id="start">🟢 ACTIVAR SESIÓN</button></div><div class="row"><button id="pause">PAUSAR</button><button id="resume">CONTINUAR</button><button id="stop">DETENER</button><button id="reset">LIMPIAR</button></div><small><b>BRIDGE funciona íntegramente como extensión del navegador.</b> Esta interfaz se abre como una pestaña normal de la extensión, no como un popup ni como un programa externo. Puedes cambiar de pestaña o minimizar el navegador y el ciclo seguirá gestionado por la extensión. Cada perfil de Chrome/Brave mantiene su propio estado.</small></main><script src="control.js"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>BRIDGE — Centro de control</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;--bg:#0b1020;--panel:#121a2b;--panel2:#182338;--line:#2b3951;--text:#eef4ff;--muted:#a7b5cc;--blue:#7ca7ff;--green:#70dfa0;--red:#ff8585;--amber:#f5cc72}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#172844 0,#0b1020 52%);color:var(--text);min-height:100vh;padding:28px 16px 40px}
+main{max-width:1100px;margin:auto}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.brand{display:flex;align-items:center;gap:12px}.logo{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#5b8cff,#8a72f8);font-size:24px;font-weight:900;box-shadow:0 8px 28px #5079dd35}h1{font-size:clamp(25px,4vw,34px);letter-spacing:-.04em;margin:0}.subtitle{color:var(--muted);margin:4px 0 0;font-size:14px}.version{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:7px 10px;white-space:nowrap}
+.notice{padding:14px 16px;border:1px solid #344969;border-radius:14px;background:#132039;color:#c8d8f3;margin-bottom:18px;font-size:14px;line-height:1.5}.notice strong{color:white}
+.dashboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.metric,.panel{border:1px solid var(--line);background:linear-gradient(180deg,#151f32,#101827);border-radius:16px;box-shadow:0 12px 28px #00000012}.metric{padding:16px;min-height:108px}.metric-label{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:750}.metric-value{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-top:12px;overflow-wrap:anywhere}.metric-detail{font-size:12px;color:var(--muted);margin-top:5px}
+.panel{padding:18px;margin-bottom:16px}.section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 14px;font-size:16px}.section-title small{color:var(--muted);font-size:12px;font-weight:500}
+label{display:block;margin:12px 0 6px;font-weight:700;font-size:13px;color:#d7e2f5}select,textarea,input,button{font:inherit;width:100%;padding:11px 12px;border-radius:10px;border:1px solid #34435c;background:#0e1727;color:var(--text);min-height:42px}textarea{min-height:104px;resize:vertical;line-height:1.5}input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}button{cursor:pointer;font-weight:750;transition:transform .12s,border-color .12s,background .12s}button:hover:not(:disabled){border-color:#7ca7ff;background:#1b2a43}button:active:not(:disabled){transform:translateY(1px)}button:disabled,select:disabled,input:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:end}.row>*{flex:1;min-width:0}.session-row{align-items:center}.primary{margin-top:14px}.btn-primary{background:#315fc0;border-color:#527fdf}.btn-stop{border-color:#8d414b;color:#ffb2b2;background:#351c29}.btn-muted{background:#172235}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.two-col>.panel{margin-bottom:0}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field-grid label{margin-top:10px}
+#status{padding:11px 13px;border-radius:11px;background:#1a2b43;border:1px solid #344b6a;margin:0;font-weight:800;font-size:14px;overflow-wrap:anywhere}#status[data-tone="good"]{color:var(--green);background:#102a25;border-color:#235b4b}#status[data-tone="warn"]{color:var(--amber);background:#2b2517;border-color:#63512b}#status[data-tone="error"]{color:var(--red);background:#321c27;border-color:#703743}
+.progress-wrap{height:7px;background:#263249;border-radius:99px;overflow:hidden;margin-top:10px}.progress-bar{height:100%;width:0;background:linear-gradient(90deg,#5688ff,#7bdfae);border-radius:99px;transition:width .2s}.role-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.pill{border:1px solid var(--line);background:#111b2b;padding:7px 10px;border-radius:999px;color:var(--muted);font-size:12px}.pill strong{color:var(--text)}
+#log{height:330px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0a111d;scroll-behavior:smooth}.msg{padding:12px;margin:8px 0;border-radius:11px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:13px}.brain{background:#172744;border-left:4px solid #6e9cff}.worker{background:#183025;border-left:4px solid #5dcc88}.system{background:#202a39;border-left:4px solid #8392a8;color:#c7d0df}.who{font-weight:800;margin-bottom:5px}.empty{color:var(--muted);text-align:center;padding:28px 10px;font-size:13px}.hint{padding:12px 14px;border:1px solid #344969;border-radius:12px;background:#111e32;color:var(--muted);font-size:13px;line-height:1.5;margin-top:14px}
+.diagnostic{border-left:4px solid #52647d}.diagnostic[data-kind="timeout"],.diagnostic[data-kind="tab-closed"],.diagnostic[data-kind="tab-invalid"],.diagnostic[data-kind="tab-unresponsive"],.diagnostic[data-kind="error"],.diagnostic[data-kind="recovery"],.diagnostic[data-kind="empty-response"],.diagnostic[data-kind="duplicate-response"]{border-left-color:var(--red)}.diagnostic[data-kind="stopped"]{border-left-color:var(--amber)}.diagnostic[data-kind="none"]{border-left-color:var(--green)}.diagnostic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.diagnostic-item{padding:12px;border:1px solid var(--line);border-radius:10px;background:#0d1625;min-width:0}.diagnostic-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;margin-bottom:6px}.diagnostic-value{font-size:13px;line-height:1.5;overflow-wrap:anywhere}.diagnostic-recovery{margin-top:12px;padding:13px;border-radius:10px;background:#172640;color:#dce8fc;line-height:1.55;font-size:13px}.foot{color:var(--muted);font-size:12px;line-height:1.6;margin:16px 2px 0}.foot strong{color:#dbe7fa}
+@media(max-width:760px){body{padding:18px 12px 30px}.dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}.diagnostic-grid{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}.row{flex-wrap:wrap}.row>*{flex-basis:calc(50% - 8px)}.session-row>*{flex-basis:100%}.metric{min-height:94px;padding:13px}.metric-value{font-size:19px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="brand"><div class="logo" aria-hidden="true">B</div><div><h1>BRIDGE</h1><p class="subtitle">Centro de control · CEREBRO ↔ OBRERO</p></div></div>
+    <span class="version">MULTI-SESIÓN · MV3</span>
+  </header>
+
+  <div class="notice"><strong>Cómo funciona:</strong> elige dos pestañas ChatGPT distintas, escribe la tarea inicial y activa la sesión. BRIDGE alterna las respuestas entre CEREBRO y OBRERO. Puedes pausar o detener el ciclo en cualquier momento.</div>
+
+  <section class="dashboard" aria-label="Resumen de la sesión">
+    <article class="metric"><div class="metric-label">Estado</div><div id="metricStatus" class="metric-value">Cargando…</div><div id="metricStatusDetail" class="metric-detail">Sincronizando con BRIDGE</div></article>
+    <article class="metric"><div class="metric-label">Iteraciones</div><div id="metricIteration" class="metric-value">0 / 10</div><div class="metric-detail">Límite de la sesión</div><div class="progress-wrap" role="progressbar" aria-label="Progreso de iteraciones" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack"><div id="progressBar" class="progress-bar"></div></div></article>
+    <article class="metric"><div class="metric-label">Turno actual</div><div id="metricRole" class="metric-value">—</div><div id="metricJob" class="metric-detail">Sin trabajo activo</div></article>
+    <article class="metric"><div class="metric-label">Pestañas detectadas</div><div id="metricTabs" class="metric-value">0</div><div id="metricTabsDetail" class="metric-detail">Actualiza para volver a detectar</div></article>
+  </section>
+
+  <section class="panel">
+    <h2 class="section-title">1. Sesión <small>cada sesión conserva su propio historial</small></h2>
+    <div class="row session-row"><div><label for="session">Sesión activa</label><select id="session" aria-label="Seleccionar sesión"></select></div><button id="newSession" type="button">＋ Nueva sesión</button><button id="deleteSession" type="button" class="btn-muted">Eliminar</button></div>
+    <label for="sessionName">Nombre identificable</label><input id="sessionName" placeholder="Ej.: Proyecto Animeart">
+    <div id="status" role="status" aria-live="polite">Cargando estado…</div>
+    <div class="role-pills"><span class="pill">CEREBRO: <strong id="brainSummary">Sin asignar</strong></span><span class="pill">OBRERO: <strong id="workerSummary">Sin asignar</strong></span></div>
+  </section>
+
+  <section class="panel diagnostic" id="diagnosticPanel" data-kind="none" aria-labelledby="diagnosticHeading" style="margin-bottom:16px">
+    <h2 class="section-title" id="diagnosticHeading">Diagnóstico y recuperación <small>motivo registrado y siguiente paso</small></h2>
+    <h3 id="diagnosticTitle" style="margin:0 0 8px;font-size:16px">Sin incidencias registradas</h3>
+    <div class="diagnostic-grid">
+      <div class="diagnostic-item"><div class="diagnostic-label">Motivo / evidencia</div><div class="diagnostic-value" id="diagnosticReason">BRIDGE mostrará aquí el motivo registrado al detenerse.</div></div>
+      <div class="diagnostic-item"><div class="diagnostic-label">Rol que falló</div><div class="diagnostic-value" id="diagnosticRole">—</div></div>
+      <div class="diagnostic-item"><div class="diagnostic-label">Pestaña implicada</div><div class="diagnostic-value" id="diagnosticTab">—</div></div>
+      <div class="diagnostic-item"><div class="diagnostic-label">Hora del evento</div><div class="diagnostic-value" id="diagnosticTime">—</div></div>
+    </div>
+    <div class="diagnostic-label" style="margin-top:14px">Cómo recuperarse</div>
+    <div class="diagnostic-recovery" id="diagnosticRecovery" role="status" aria-live="polite">Si ocurre un problema, aquí aparecerán los pasos sugeridos.</div>
+  </section>
+
+  <div class="two-col">
+    <section class="panel">
+      <h2 class="section-title">2. Conectar las pestañas <small>deben ser distintas</small></h2>
+      <label for="brain">CEREBRO <small>planifica y revisa</small></label><select id="brain"></select>
+      <label for="worker">OBRERO <small>ejecuta y devuelve evidencia</small></label><select id="worker"></select>
+      <button id="refresh" type="button" class="btn-muted primary">↻ Actualizar pestañas</button>
+      <div class="hint">Consejo: abre una conversación de ChatGPT para CEREBRO y otra para OBRERO. Si no aparecen, recarga esas pestañas después de actualizar la extensión.</div>
+    </section>
+
+    <section class="panel">
+      <h2 class="section-title">3. Iniciar el trabajo <small>configura los límites</small></h2>
+      <label for="seed">Mensaje inicial para CEREBRO</label><textarea id="seed" placeholder="Describe la tarea, el objetivo y las condiciones de finalización…"></textarea>
+      <div class="field-grid">
+        <div><label for="iterations">Iteraciones máximas</label><input id="iterations" type="number" min="1" max="100" value="10"></div>
+        <div><label for="minTurnDelay">Espera mínima (seg.)</label><input id="minTurnDelay" type="number" min="0" max="60" value="0"></div>
+        <div><label for="brainTimeout">Timeout CEREBRO (seg.)</label><input id="brainTimeout" type="number" min="5" max="1800" value="60"></div>
+        <div><label for="workerTimeout">Timeout OBRERO (seg.)</label><input id="workerTimeout" type="number" min="5" max="1800" value="600"></div>
+      </div>
+      <button id="start" type="button" class="btn-primary primary">▶ ACTIVAR SESIÓN</button>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top:16px">
+    <h2 class="section-title">4. Control y seguridad <small>detener no elimina el historial</small></h2>
+    <div class="row"><button id="pause" type="button">Ⅱ Pausar</button><button id="resume" type="button">▶ Continuar</button><button id="stop" type="button" class="btn-stop">■ Detener</button><button id="reset" type="button" class="btn-muted">Limpiar historial</button></div>
+  </section>
+
+  <section class="panel" style="margin-top:16px">
+    <h2 class="section-title">5. Historial de actividad <small>actualización automática</small></h2>
+    <div id="log" aria-live="polite"><div class="empty">Todavía no hay actividad. Activa una sesión para ver aquí los mensajes.</div></div>
+  </section>
+  <p class="foot"><strong>Privacidad y funcionamiento:</strong> BRIDGE se ejecuta como extensión del navegador y guarda el estado en el almacenamiento local del perfil. Cada perfil de Chrome/Brave mantiene su propio estado. La pestaña de control solo administra y muestra la actividad; no es un programa externo. El éxito de las pruebas automatizadas no sustituye una prueba real con dos conversaciones de ChatGPT.</p>
+</main>
+<script src="control.js"></script>
+</body>
+</html>

@@ -21,6 +21,10 @@ const STOP_SELECTORS = [
 const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
 const RESPONSE_STABLE_MS = 2000;
 let activeJobId = null;
+let activeJobCancelled = false;
+// Deduplicate START_TURN delivery per tab, including retries arriving after completion.
+const seenJobIds = new Set();
+const MAX_SEEN_JOB_IDS = 100;
 
 function firstVisible(selectors) {
   for (const selector of selectors) {
@@ -133,9 +137,10 @@ function insertText(element, text) {
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-async function waitForInput(timeoutMs) {
+async function waitForInput(timeoutMs, shouldCancel = () => false) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
+    if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
     const input = getInput();
     if (input) return input;
     await new Promise(r => setTimeout(r, 250));
@@ -143,9 +148,10 @@ async function waitForInput(timeoutMs) {
   throw new Error("ChatGPT input not found");
 }
 
-async function waitForSendButton(timeoutMs) {
+async function waitForSendButton(timeoutMs, shouldCancel = () => false) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
+    if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
     const button = firstVisible(SEND_SELECTORS);
     if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") return button;
     await new Promise(r => setTimeout(r, 200));
@@ -163,7 +169,7 @@ function isGenerationStopped() {
   return !firstVisible(STOP_SELECTORS);
 }
 
-async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
+async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs, shouldCancel = () => false) {
   let lastText = "";
   let stableSince = 0;
   let sawNewResponse = false;
@@ -171,6 +177,7 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   const deadline = sentAt + timeoutMs + RESPONSE_STABLE_MS;
 
   while (Date.now() < deadline) {
+    if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
     const latestNode = getLatestAssistantNode();
     const current = getAssistantText(latestNode);
     const isNewNode = latestNode && latestNode !== beforeNode;
@@ -204,14 +211,16 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   );
 }
 
-async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
-  const input = await waitForInput(10000);
+async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, shouldCancel = () => false) {
+  const input = await waitForInput(10000, shouldCancel);
+  if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
   const beforeNode = getLatestAssistantNode();
   const beforeText = getAssistantText(beforeNode);
 
   insertText(input, text);
 
-  const button = await waitForSendButton(10000);
+  const button = await waitForSendButton(10000, shouldCancel);
+  if (shouldCancel()) throw new Error("Turno cancelado por BRIDGE");
   button.click();
 
   return waitForCompletedResponse(
@@ -219,8 +228,23 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
     beforeText,
     Date.now(),
     timeoutMs,
-    minTurnDelayMs
+    minTurnDelayMs,
+    shouldCancel
   );
+}
+
+async function reportTurnComplete(message, result) {
+  const response = await chrome.runtime.sendMessage({
+    type: "TURN_COMPLETE",
+    sessionId: String(message.sessionId || ""),
+    jobId: String(message.jobId || ""),
+    role: message.role || "ChatGPT",
+    ...result
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "BRIDGE no confirmó la finalización del turno");
+  }
 }
 
 async function runTurn(message) {
@@ -228,39 +252,67 @@ async function runTurn(message) {
     const text = await sendAndWait(
       message.text,
       Number(message.timeoutMs) || 60000,
-      Number(message.minTurnDelayMs) || 0
+      Number(message.minTurnDelayMs) || 0,
+      () => activeJobCancelled || activeJobId !== String(message.jobId || "")
     );
 
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: true,
-      text,
-      role: message.role || "ChatGPT"
-    });
+    if (activeJobCancelled) throw new Error("Turno cancelado por BRIDGE");
+    await reportTurnComplete(message, { ok: true, text });
   } catch (error) {
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: false,
-      error: error.message || String(error),
-      role: message.role || "ChatGPT"
-    });
+    try {
+      await reportTurnComplete(message, {
+        ok: false,
+        error: error.message || String(error)
+      });
+    } catch (reportError) {
+      console.error("BRIDGE no pudo confirmar el resultado del turno", reportError);
+    }
   } finally {
-    if (activeJobId === message.jobId) activeJobId = null;
+    if (activeJobId === message.jobId) {
+      activeJobId = null;
+      activeJobCancelled = false;
+    }
   }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "START_TURN") {
-    if (activeJobId && activeJobId !== message.jobId) {
+    const jobId = String(message.jobId || "");
+    if (!jobId) {
+      sendResponse({ ok: false, error: "START_TURN requiere un jobId válido" });
+      return;
+    }
+    if (seenJobIds.has(jobId)) {
+      sendResponse({ ok: true, started: false, duplicate: true });
+      return;
+    }
+    if (activeJobId) {
       sendResponse({ ok: false, error: "Esta pestaña ya está ejecutando otro turno" });
       return;
     }
 
-    activeJobId = String(message.jobId || "");
-    runTurn({ ...message, role: message.role || "ChatGPT" });
+    // Record before starting asynchronous work so a duplicate delivery cannot
+    // submit the same prompt twice, even after the first turn has completed.
+    seenJobIds.add(jobId);
+    if (seenJobIds.size > MAX_SEEN_JOB_IDS) {
+      seenJobIds.delete(seenJobIds.values().next().value);
+    }
+    activeJobId = jobId;
+    activeJobCancelled = false;
+    runTurn({ ...message, jobId, role: message.role || "ChatGPT" });
     sendResponse({ ok: true, started: true });
+    return;
+  }
+
+  if (message?.type === "CANCEL_TURN") {
+    if (String(message.jobId || "") === activeJobId && activeJobId) {
+      activeJobCancelled = true;
+      const stopButton = firstVisible(STOP_SELECTORS);
+      if (stopButton) stopButton.click();
+      sendResponse({ ok: true, cancelled: true });
+    } else {
+      sendResponse({ ok: true, cancelled: false });
+    }
     return;
   }
 

@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Bridge — ChatGPT Loop",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Browser-only multi-session bridge using the source chat response action to isolate origin turns.",
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
