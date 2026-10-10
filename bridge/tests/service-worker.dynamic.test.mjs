@@ -637,12 +637,15 @@ test("STOP mientras finishTurn espera persistencia no avanza iteration ni lastFo
   holdResult = true;
   const completing = complete(h, active, { jobId: active.activeJobId, text: "resultado bajo barrera" });
   await entered.promise;
-  const stopped = await h.call({ type: "STOP", sessionId: id });
+  const stopping = h.call({ type: "STOP", sessionId: id });
+  const inMemoryStopped = (await h.state()).sessions[0];
+  assert.equal(inMemoryStopped.status, "STOPPED");
+  assert.equal(inMemoryStopped.running, false);
+  release.resolve();
+  const [stopped] = await Promise.all([stopping, completing]);
   assert.equal(stopped.ok, true);
   assert.equal(stopped.state.sessions[0].status, "STOPPED");
   assert.equal(stopped.state.sessions[0].running, false);
-  release.resolve();
-  await completing;
   const after = (await h.state()).sessions[0];
   assert.equal(after.status, "STOPPED");
   assert.equal(after.running, false);
