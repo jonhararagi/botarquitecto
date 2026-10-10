@@ -70,7 +70,15 @@ async function hydrate() {
   hydrated = true;
   await saveState();
 }
-async function saveState() { await chrome.storage.local.set({ [STORAGE_KEY]: state }); }
+let saveRevision = 0;
+async function saveState() {
+  const revision = ++saveRevision;
+  const payload = structuredClone(state);
+  await chrome.storage.local.set({ [STORAGE_KEY]: payload });
+  // If an older write completed after a newer state mutation/write, repair storage
+  // from the current in-memory authority rather than leaving a stale snapshot last.
+  if (revision !== saveRevision) await saveState();
+}
 function getSession(id) { return state.sessions.find(s => s.id === id) || null; }
 function snapshot() { return { version: state.version, activeSessionId: state.activeSessionId, sessions: state.sessions.map(s => ({ ...s, log: [...s.log] })) }; }
 async function addLog(s, role, text) {
