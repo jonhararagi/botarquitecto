@@ -29,7 +29,7 @@
 
 ## Métrica de progreso
 
-**Progreso global: 15% (estimación inicial de gestión, confianza baja).** Es una línea base provisional, no un resultado de pruebas. La cifra solo debe cambiar cuando los hitos de `ROADMAP.md` tengan evidencia. El código existente no equivale a calidad de producción.
+**Progreso global: 15% (estimación inicial de gestión, confianza baja).** No se incrementa por añadir tests o documentación; revisar tras obtener evidencia de CI y pruebas dinámicas. Es una línea base provisional, no un resultado de pruebas. La cifra solo debe cambiar cuando los hitos de `ROADMAP.md` tengan evidencia. El código existente no equivale a calidad de producción.
 
 ## Próxima tarea única recomendada
 
