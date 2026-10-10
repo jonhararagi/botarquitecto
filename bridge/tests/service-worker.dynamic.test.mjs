@@ -470,7 +470,7 @@ test("reinicializar el worker real conserva almacenamiento y no reenvía un turn
   const stale = await complete(restarted, recovered, {
     jobId: oldJobId, role: "CEREBRO", text: "respuesta tras reinicio"
   });
-  assert.equal(stale.ok, true);
+  assert.equal(stale.ok, false, "una respuesta tras reinicio debe rechazarse explícitamente");
   const afterStale = (await restarted.state()).sessions.find(s => s.id === activeId);
   assert.equal(afterStale.status, recovered.status);
   assert.equal(afterStale.iteration, 0);

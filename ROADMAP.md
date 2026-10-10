@@ -175,3 +175,6 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 
 
 - BRIDGE-008 checkpoint: run [38055411681](https://github.com/jonhararagi/botarquitecto/actions/runs/38055411681) falló en sintaxis de la suite estática por una expresión regular mal escapada; no ejecutó suites dinámicas. Corregida la aserción para usar comprobaciones literales. Se actualizan expectativas previas para que jobs antiguos sean rechazados explícitamente, y se amplía D para comprobar que un job nuevo permanece intacto frente a una respuesta del job anterior. CI posterior pendiente.
+
+
+- BRIDGE-008 checkpoint: run [38055617828](https://github.com/jonhararagi/botarquitecto/actions/runs/38055617828) pasó sintaxis y contratos estáticos, pero detectó una expectativa antigua en la prueba de recuperación tras reinicio: el test esperaba `ok: true` para un job obsoleto. Se alinea con el nuevo contrato de rechazo explícito. Las pruebas dinámicas restantes de esa ejecución pasaron; el siguiente run debe validar el ajuste y la suite integrada.
