@@ -7,6 +7,8 @@ BRIDGE es una extensión Chromium Manifest V3 que coordina turnos entre pestaña
 ## Estructura
 
 - `bridge/`: extensión Chromium (manifest, panel de control, popup, service worker y content script).
+- `bridge/tests/validation.test.mjs`: pruebas de regresión contractuales basadas en inspección de fuentes.
+- `.github/workflows/bridge-validation.yml`: CI de sintaxis JavaScript y pruebas contractuales.
 - `cerebro/INSTRUCCIONES.md`: protocolo obligatorio para agentes de planificación y auditoría.
 - `STATUS.md`: estado, riesgos, métrica orientativa y próxima tarea.
 - `ROADMAP.md`: hitos y condiciones de salida.
@@ -24,13 +26,29 @@ BRIDGE es una extensión Chromium Manifest V3 que coordina turnos entre pestaña
 
 Cada perfil aislado necesita su propia instalación. Una pestaña no debe pertenecer a dos sesiones activas.
 
+## Ejecutar validaciones
+
+Se necesita Node.js 22 o compatible con `node:test`; no hay dependencias npm para la suite inicial.
+
+Desde la raíz del repositorio, ejecuta:
+
+```sh
+node --check bridge/service-worker.js
+node --check bridge/content.js
+node --check bridge/control.js
+node --check bridge/popup.js
+node --test bridge/tests/*.test.mjs
+```
+
+La workflow `.github/workflows/bridge-validation.yml` ejecuta los mismos comandos en push, pull request y ejecución manual. La suite actual verifica contratos estáticos en el código y el manifiesto; **no** sustituye pruebas dinámicas de estados, concurrencia ni pruebas de navegador.
+
 ## Límites conocidos
 
 - Depende del DOM y de los selectores de ChatGPT, que pueden cambiar.
 - La extensión solo puede gestionar pestañas dentro del perfil de navegador donde está instalada.
 - El estado persistido en almacenamiento local no equivale a una garantía de recuperación transaccional después de un cierre abrupto.
 - La automatización puede fallar por cambios de interfaz, límites de servicio, red o generación incompleta. Debe detenerse ante ambigüedad.
-- La revisión documental y estática no demuestra que el flujo funcione en un navegador real.
+- La revisión documental, la suite contractual y CI no demuestran que el flujo funcione en un navegador real.
 
 ## Calidad, seguridad y material externo
 
