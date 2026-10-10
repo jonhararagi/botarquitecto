@@ -79,4 +79,4 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - [ ] Decidir si se necesita cancelación explícita del polling/generación del content script al recibir STOP; hoy el worker invalida la respuesta, pero no aborta directamente el polling ya iniciado.
 - [ ] No declarar terminada la resiliencia Manifest V3 hasta completar la validación real de navegador y los casos pendientes.
 
-**Evidencia actual:** `PASS_STATIC` revisión del código y workflow en la rama; `NOT_RUN` ejecución local, CI del nuevo SHA y navegador real. Los checks marcados como implementados describen archivos y cobertura añadida, no resultados de ejecución.
+**Evidencia actual:** `PASS_STATIC` revisión del código y workflow en la rama; `PASS_REAL` [CI run 38035650008](https://github.com/jonhararagi/botarquitecto/actions/runs/38035650008), success en SHA exacto `dfa5a00fbb46061d6a5e39be633716bd3536ef59`, incluidos syntax, contratos, suite dinámica y timeout del content script con reloj simulado. `NOT_RUN` ejecución local y navegador real.
