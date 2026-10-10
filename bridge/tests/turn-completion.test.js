@@ -613,3 +613,248 @@ test("failed session stores a role, tab and actionable recovery diagnosis", asyn
   const failed = result.state.sessions.find(item => item.id === session.id);
   assert.equal(failed.running, false);
   assert.equal(failed.diagnostic.category, "tab-closed");
+  assert.equal(failed.diagnostic.role, "CEREBRO");
+  assert.equal(failed.diagnostic.tabId, 999);
+  assert.match(failed.diagnostic.reason, /CEREBRO fue cerrada/);
+  assert.match(failed.diagnostic.recovery, /Abre de nuevo ChatGPT/);
+  assert.ok(failed.diagnostic.timestamp > 0);
+});
+
+test("manual STOP records that the user stopped the session and the active role", async () => {
+  const { listeners } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "manual stop diagnostic", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  const active = started.state.sessions.find(item => item.id === session.id);
+  assert.equal(active.activeRole, "CEREBRO");
+
+  const stopped = await send(listeners, { type: "STOP", sessionId: session.id });
+  const finalSession = stopped.state.sessions.find(item => item.id === session.id);
+  assert.equal(finalSession.diagnostic.category, "stopped");
+  assert.equal(finalSession.diagnostic.role, "CEREBRO");
+  assert.equal(finalSession.diagnostic.tabId, 11);
+  assert.match(finalSession.diagnostic.reason, /usuario/i);
+});
+
+test("diagnostic panel displays cause, failed role, tab and recovery guidance", () => {
+  const html = fs.readFileSync(path.join(root, "control.html"), "utf8");
+  const script = fs.readFileSync(path.join(root, "control.js"), "utf8");
+  for (const id of [
+    "diagnosticPanel", "diagnosticTitle", "diagnosticReason", "diagnosticRole",
+    "diagnosticTab", "diagnosticRecovery", "diagnosticTime"
+  ]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "missing diagnostic element: " + id);
+  }
+  assert.match(html, /Diagnóstico y recuperación/);
+  assert.match(script, /x\.diagnostic/);
+  assert.match(script, /diagnostic\.tabId/);
+  assert.match(script, /diagnostic\.recovery/);
+  assert.ok(script.includes('statusValue.replace(/^ERROR\\s*[—-]\\s*/,"")'), "error prefix must use whitespace regex escapes, not literal backslashes");
+  assert.match(script, /Sin incidencias registradas/);
+});
+
+
+test("RESUME fails the session safely when the next tab is unavailable", async () => {
+  let brainTabUnavailable = false;
+  const worker = await readyWorker({
+    async beforeGet(id) {
+      if (id === 11 && brainTabUnavailable) throw new Error("Tab not found");
+    }
+  });
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "Resume with unavailable next tab", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  assert.equal(started.ok, true);
+  let active = started.state.sessions.find(item => item.id === session.id);
+  assert.equal(active.activeRole, "CEREBRO");
+
+  const brainDone = await send(worker.listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: active.activeJobId,
+    role: "CEREBRO", ok: true, text: "Brain response"
+  }, 11);
+  assert.equal(brainDone.ok, true);
+  active = (await send(worker.listeners, { type: "GET_STATE" })).state.sessions.find(item => item.id === session.id);
+  assert.equal(active.activeRole, "OBRERO");
+
+  const paused = await send(worker.listeners, { type: "PAUSE", sessionId: session.id });
+  assert.equal(paused.ok, true);
+  const workerDone = await send(worker.listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: active.activeJobId,
+    role: "OBRERO", ok: true, text: "Worker response"
+  }, 22);
+  assert.equal(workerDone.ok, true);
+  let pausedSession = (await send(worker.listeners, { type: "GET_STATE" })).state.sessions.find(item => item.id === session.id);
+  assert.equal(pausedSession.running, true);
+  assert.equal(pausedSession.paused, true);
+  assert.equal(pausedSession.activeJobId, null);
+
+  brainTabUnavailable = true;
+  const resumed = await send(worker.listeners, { type: "RESUME", sessionId: session.id });
+  assert.equal(resumed.ok, true);
+  const failed = resumed.state.sessions.find(item => item.id === session.id);
+  assert.equal(failed.running, false);
+  assert.equal(failed.activeJobId, null);
+  assert.match(failed.status, /^ERROR/);
+  assert.equal(failed.diagnostic.category, "tab-closed");
+  assert.equal(failed.diagnostic.role, "CEREBRO");
+  assert.equal(failed.diagnostic.tabId, 11);
+});
+
+test("RESET_SESSION preserves stable identity, active selection, and configured tabs", async () => {
+  const { listeners } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+
+  const saved = await send(listeners, {
+    type: "SAVE_SESSION", sessionId: session.id, name: session.name,
+    brainTabId: 11, workerTabId: 22, maxIterations: 10,
+    brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  assert.equal(saved.ok, true);
+
+  const reset = await send(listeners, { type: "RESET_SESSION", sessionId: session.id });
+  assert.equal(reset.ok, true);
+  assert.equal(reset.state.activeSessionId, session.id);
+  const resetSession = reset.state.sessions.find(item => item.id === session.id);
+  assert.ok(resetSession, "reset must not replace the session's stable ID");
+  assert.equal(resetSession.id, session.id);
+  assert.equal(resetSession.brainTabId, 11);
+  assert.equal(resetSession.workerTabId, 22);
+  assert.equal(resetSession.status, "IDLE");
+  assert.equal(resetSession.running, false);
+});
+
+test("empty response diagnosis preserves the originating role and tab", async () => {
+  const { listeners } = await readyWorker();
+  const initial = await send(listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "empty response diagnosis", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  const active = started.state.sessions.find(item => item.id === session.id);
+
+  const completed = await send(listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: active.activeJobId,
+    role: "CEREBRO", ok: true, text: "   "
+  }, 11);
+  assert.equal(completed.ok, true);
+  const after = await send(listeners, { type: "GET_STATE" });
+  const failed = after.state.sessions.find(item => item.id === session.id);
+  assert.equal(failed.running, false);
+  assert.equal(failed.diagnostic.category, "empty-response");
+  assert.equal(failed.diagnostic.role, "CEREBRO");
+  assert.equal(failed.diagnostic.tabId, 11);
+  assert.match(failed.diagnostic.recovery, /respuesta visible/);
+});
+
+
+test("STOP during tab validation preserves STOPPED when validation rejects late", async () => {
+  let enteredResolve;
+  let releaseResolve;
+  const enteredGet = new Promise(resolve => { enteredResolve = resolve; });
+  const releaseGet = new Promise(resolve => { releaseResolve = resolve; });
+  const worker = await readyWorker({
+    async beforeGet(id) {
+      if (id === 11) {
+        enteredResolve();
+        await releaseGet;
+        throw new Error("Tab not found after STOP");
+      }
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const startPromise = send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "STOP before tab validation rejects", maxIterations: 10,
+    brainTimeoutMs: 60000, workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+
+  await enteredGet;
+  const stopped = await send(worker.listeners, { type: "STOP", sessionId: session.id });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.state.sessions.find(item => item.id === session.id).status, "STOPPED");
+
+  releaseResolve();
+  const startResult = await startPromise;
+  assert.equal(startResult.ok, true);
+
+  const finalState = await send(worker.listeners, { type: "GET_STATE" });
+  const finalSession = finalState.state.sessions.find(item => item.id === session.id);
+  assert.equal(finalSession.status, "STOPPED");
+  assert.equal(finalSession.running, false);
+  assert.equal(finalSession.activeJobId, null);
+  assert.equal(finalSession.activeRole, null);
+  assert.equal(worker.sent.some(item => item.message.type === "START_TURN"), false);
+});
+
+test("concurrent RESUME requests dispatch only one turn for a session", async () => {
+  let blockValidation = false;
+  let enteredResolve;
+  let releaseResolve;
+  const enteredGet = new Promise(resolve => { enteredResolve = resolve; });
+  const releaseGet = new Promise(resolve => { releaseResolve = resolve; });
+  const worker = await readyWorker({
+    async beforeGet(id) {
+      if (id === 22 && blockValidation) {
+        enteredResolve();
+        await releaseGet;
+      }
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "Concurrent RESUME regression", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  const first = started.state.sessions.find(item => item.id === session.id);
+  assert.ok(first.activeJobId);
+
+  const paused = await send(worker.listeners, { type: "PAUSE", sessionId: session.id });
+  assert.equal(paused.ok, true);
+  const brainDone = await send(worker.listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: first.activeJobId,
+    role: "CEREBRO", ok: true, text: "Brain response before resume"
+  }, 11);
+  assert.equal(brainDone.ok, true);
+
+  const readyToResume = await send(worker.listeners, { type: "GET_STATE" });
+  const pausedSession = readyToResume.state.sessions.find(item => item.id === session.id);
+  assert.equal(pausedSession.running, true);
+  assert.equal(pausedSession.paused, true);
+  assert.equal(pausedSession.activeJobId, null);
+
+  blockValidation = true;
+  const resumeA = send(worker.listeners, { type: "RESUME", sessionId: session.id });
+  await enteredGet;
+  const resumeB = send(worker.listeners, { type: "RESUME", sessionId: session.id });
+  releaseResolve();
+  const [resultA, resultB] = await Promise.all([resumeA, resumeB]);
+
+  assert.equal(resultA.ok, true);
+  assert.equal(resultB.ok, true);
+  const startsForWorker = worker.sent.filter(item =>
+    item.tabId === 22 && item.message.type === "START_TURN"
+  );
+  assert.equal(startsForWorker.length, 1, "concurrent RESUME calls must share one dispatch");
+  const finalState = await send(worker.listeners, { type: "GET_STATE" });
+  const resumed = finalState.state.sessions.find(item => item.id === session.id);
+  assert.equal(resumed.running, true);
+  assert.equal(resumed.activeRole, "OBRERO");
+  assert.ok(resumed.activeJobId);
+});
+
