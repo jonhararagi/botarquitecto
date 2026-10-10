@@ -26,5 +26,7 @@ jobs:
           node --check bridge/content.js
           node --check bridge/control.js
           node --check bridge/popup.js
-      - name: Run regression contract tests
-        run: node --test bridge/tests/*.test.mjs
+      - name: Run static regression contract tests
+        run: node --test bridge/tests/validation.test.mjs
+      - name: Run dynamic service-worker tests with Chrome API mocks
+        run: node --test bridge/tests/service-worker.dynamic.test.mjs
