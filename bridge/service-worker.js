@@ -20,6 +20,15 @@ async function hydrate() {
   const saved = await chrome.storage.local.get(STORAGE_KEY);
   if (saved?.[STORAGE_KEY]?.sessions) state = saved[STORAGE_KEY];
   if (!Array.isArray(state.sessions)) state.sessions = [];
+  state.sessions = state.sessions.filter(s => s && typeof s === "object").map(s => {
+    const defaults = createSessionModel("Sesión recuperada");
+    return {
+      ...defaults,
+      ...s,
+      id: typeof s.id === "string" && s.id ? s.id : defaults.id,
+      log: Array.isArray(s.log) ? s.log : []
+    };
+  });
   if (!state.sessions.length) {
     const s = createSessionModel("Sesión 1");
     state.sessions.push(s);
@@ -29,27 +38,29 @@ async function hydrate() {
   // A persisted "running" flag cannot prove that a turn still exists after MV3
   // worker termination. Recover conservatively: never replay an ambiguous send.
   for (const s of state.sessions) {
-    if (!s || typeof s !== "object") continue;
-    if (!Array.isArray(s.log)) s.log = [];
     if (s.running === true && s.paused === true && !s.activeJobId) {
       // A paused session with no pending job can safely remain paused.
       s.running = false;
       s.activeRole = null;
       s.status = "PAUSED — Recuperada tras reinicio; pulsa RESUME para continuar.";
-    } else if (s.running === true || s.activeJobId) {
-      s.running = false;
-      s.activeJobId = null;
-      s.activeRole = null;
-      if (s.status !== "FINISHED — TRABAJO TERMINADO" &&
-          s.status !== "STOPPED" &&
-          !String(s.status || "").startsWith("LIMIT_REACHED")) {
-        s.status = "ERROR — Recuperación MV3: el resultado del turno anterior es ambiguo. Revisa ChatGPT y reinicia manualmente.";
+    } else {
+      const appearsActive = s.running === true || Boolean(s.activeJobId) ||
+        /^(STARTING|RUNNING|AUTO_FORWARD)/.test(String(s.status || ""));
+      if (appearsActive) {
+        s.running = false;
+        s.activeJobId = null;
+        s.activeRole = null;
+        if (s.status !== "FINISHED — TRABAJO TERMINADO" &&
+            s.status !== "STOPPED" &&
+            !String(s.status || "").startsWith("LIMIT_REACHED")) {
+          s.status = "ERROR — Recuperación MV3: el resultado del turno anterior es ambiguo. Revisa ChatGPT y reinicia manualmente.";
+        }
       }
     }
   }
 
-  if (!state.activeSessionId || !state.sessions.some(s => s && s.id === state.activeSessionId)) {
-    state.activeSessionId = state.sessions.find(s => s && s.id)?.id || null;
+  if (!state.activeSessionId || !state.sessions.some(s => s.id === state.activeSessionId)) {
+    state.activeSessionId = state.sessions[0].id;
   }
   hydrated = true;
   await saveState();
