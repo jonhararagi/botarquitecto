@@ -141,3 +141,7 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Estado provisional:** `PARTIAL` hasta verificar CI en el SHA final exacto. PR #6 continúa abierto y sin merge; no se escribió en `main`.
 - **TIMER:** tiempo real medido no disponible. Estimación restante: 30–90 min para CI, corregir fallos y reconciliar evidencias; 1–3 h adicionales para navegador real si se dispone de Chrome/Brave. Estabilización BRIDGE: 3–7 días de trabajo concentrado, confianza baja.
 - **Siguiente tarea única:** revisar el resultado de CI en el SHA final y corregir únicamente los fallos que reproduzca esa suite antes de iniciar la tarea separada de cancelación cooperativa.
+
+
+- **Checkpoint CI intermedio:** run [38049197793](https://github.com/jonhararagi/botarquitecto/actions/runs/38049197793) falló en `bridge/tests/validation.test.mjs` porque un contrato estático esperaba la llamada antigua a `failSession()` sin token. La sintaxis pasó; las suites dinámicas no se ejecutaron en ese run. Se ajustó el contrato para exigir el token de ejecución. Esto fue un desajuste de la prueba estática tras el cambio de firma, no evidencia de que las pruebas A/B/C fallaran.
+- **Corrección del contrato:** commit `69a29da8b2837f3b495ded81b4cf9941ef05bd98`. CI posterior para el SHA final aún pendiente de consulta; no marcar PASS hasta verificarlo.
