@@ -25,7 +25,27 @@ async function hydrate() {
     state.sessions.push(s);
     state.activeSessionId = s.id;
   }
-  if (!state.activeSessionId || !state.sessions.some(s => s.id === state.activeSessionId)) state.activeSessionId = state.sessions[0].id;
+
+  // A persisted "running" flag cannot prove that a turn still exists after MV3
+  // worker termination. Recover conservatively: never replay an ambiguous send.
+  for (const s of state.sessions) {
+    if (!s || typeof s !== "object") continue;
+    if (!Array.isArray(s.log)) s.log = [];
+    if (s.running === true || s.activeJobId) {
+      s.running = false;
+      s.activeJobId = null;
+      s.activeRole = null;
+      if (s.status !== "FINISHED — TRABAJO TERMINADO" &&
+          s.status !== "STOPPED" &&
+          !String(s.status || "").startsWith("LIMIT_REACHED")) {
+        s.status = "ERROR — Recuperación MV3: el resultado del turno anterior es ambiguo. Revisa ChatGPT y reinicia manualmente.";
+      }
+    }
+  }
+
+  if (!state.activeSessionId || !state.sessions.some(s => s && s.id === state.activeSessionId)) {
+    state.activeSessionId = state.sessions.find(s => s && s.id)?.id || null;
+  }
   hydrated = true;
   await saveState();
 }
