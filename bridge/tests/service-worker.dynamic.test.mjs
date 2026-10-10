@@ -23,11 +23,12 @@ function makeHarness({ savedState, sendMessage } = {}) {
   ]);
   const sent = [];
   let stored = savedState ? structuredClone(savedState) : {};
+  const initialSaved = deferred();
   const storage = {
     async get(key) {
       return Object.prototype.hasOwnProperty.call(stored, key) ? { [key]: structuredClone(stored[key]) } : {};
     },
-    async set(value) { stored = { ...stored, ...structuredClone(value) }; }
+    async set(value) { stored = { ...stored, ...structuredClone(value) }; initialSaved.resolve(); }
   };
   const chrome = {
     storage: { local: storage },
@@ -83,7 +84,7 @@ function makeHarness({ savedState, sendMessage } = {}) {
     call, state, sent, tabs, listeners,
     persisted: () => structuredClone(stored),
     removeTab: async id => { tabs.delete(id); if (listeners.removed) await listeners.removed(id); },
-    async init() { await ready; return state(); }
+    async init() { await ready; await initialSaved.promise; return state(); }
   };
 }
 
