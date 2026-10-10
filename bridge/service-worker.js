@@ -289,10 +289,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message?.type === "GET_STATE") { sendResponse({ ok: true, state: snapshot() }); return; }
     if (message?.type === "TURN_COMPLETE") {
-      const s = getSession(String(message.sessionId || ""));
-      if (!s || (sender.tab?.id !== s.brainTabId && sender.tab?.id !== s.workerTabId)) { sendResponse({ ok: false, error: "Pestaña no autorizada" }); return; }
-      await finishTurn(s, String(message.jobId || ""), Boolean(message.ok), String(message.role || s.activeRole || "ChatGPT"), message.text, message.error);
-      sendResponse({ ok: true }); return;
+      const sessionId = typeof message.sessionId === "string" ? message.sessionId.trim() : "";
+      const jobId = typeof message.jobId === "string" ? message.jobId.trim() : "";
+      const role = typeof message.role === "string" ? message.role : "";
+      const senderTabId = sender.tab?.id;
+      const s = sessionId ? getSession(sessionId) : null;
+      if (!sessionId || !jobId || !["CEREBRO", "OBRERO"].includes(role) || typeof message.ok !== "boolean" ||
+          !Number.isInteger(senderTabId)) {
+        sendResponse({ ok: false, error: "TURN_COMPLETE mal formado: falta identidad válida" }); return;
+      }
+      if (!s) { sendResponse({ ok: false, error: "Sesión no encontrada" }); return; }
+      const assignedTabId = role === "CEREBRO" ? s.brainTabId : s.workerTabId;
+      if (senderTabId !== assignedTabId) { sendResponse({ ok: false, error: "La pestaña remitente no corresponde al rol del trabajo" }); return; }
+      if (!s.running || s.stopRequested || s.activeJobId !== jobId || s.activeRole !== role) {
+        sendResponse({ ok: false, error: "TURN_COMPLETE obsoleto o no corresponde al trabajo activo" }); return;
+      }
+      await finishTurn(s, jobId, message.ok, role, message.text, message.error);
+      sendResponse({ ok: true, accepted: true }); return;
     }
     if (message?.type === "BRIDGE_CONTENT_READY") { sendResponse({ ok: true, tabId: sender.tab?.id ?? null }); return; }
     throw new Error("Mensaje BRIDGE desconocido");

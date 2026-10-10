@@ -224,28 +224,25 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
 }
 
 async function runTurn(message) {
+  let completion;
   try {
-    const text = await sendAndWait(
-      message.text,
-      Number(message.timeoutMs) || 60000,
-      Number(message.minTurnDelayMs) || 0
-    );
-
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: true,
-      text,
-      role: message.role || "ChatGPT"
-    });
+    const text = await sendAndWait(message.text, Number(message.timeoutMs) || 60000, Number(message.minTurnDelayMs) || 0);
+    completion = { ok: true, text };
   } catch (error) {
-    await chrome.runtime.sendMessage({
-      type: "TURN_COMPLETE",
-      jobId: message.jobId,
-      ok: false,
-      error: error.message || String(error),
-      role: message.role || "ChatGPT"
+    completion = { ok: false, error: error?.message || String(error) };
+  }
+  // Deliver one terminal report only. Delivery failure is not a ChatGPT result
+  // and must not trigger a second TURN_COMPLETE for this execution.
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "TURN_COMPLETE", sessionId: message.sessionId, jobId: message.jobId,
+      role: message.role, ...completion
     });
+    if (!response?.ok || response?.accepted !== true) {
+      console.error("BRIDGE TURN_COMPLETE no aceptado por el worker", response?.error || "respuesta sin confirmación");
+    }
+  } catch (deliveryError) {
+    console.error("BRIDGE no pudo entregar TURN_COMPLETE al worker", deliveryError?.message || String(deliveryError));
   } finally {
     if (activeJobId === message.jobId) activeJobId = null;
   }

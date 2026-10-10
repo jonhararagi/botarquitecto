@@ -32,3 +32,5 @@ jobs:
         run: node --test bridge/tests/service-worker.dynamic.test.mjs
       - name: Run real content-script timeout test with mocked clock
         run: node --test bridge/tests/content.timeout.test.mjs
+      - name: Run integrated content-script and service-worker contract tests
+        run: node --test bridge/tests/turn-completion.integration.test.mjs

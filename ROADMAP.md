@@ -161,3 +161,14 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - [x] Corregidas las regresiones de prueba detectadas por las dos primeras ejecuciones.
 - [ ] Verificar CI sobre el HEAD final posterior a la documentación.
 - [ ] Validar el ciclo de vida MV3 en Chrome/Brave real. No declarar producción lista antes de esa comprobación.
+
+
+## BRIDGE-008 — contrato integrado TURN_COMPLETE
+
+- Entrada: rama `worker/bridge-001-validation`, HEAD `532aaadbcc876f7496295b74e56a88100ea8f91d`; main `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR #6 abierto y sin merge. CI de entrada: run 38051025430, success sobre el SHA de entrada.
+- Diagnóstico: `dispatchTurn()` ya propagaba `sessionId` en `START_TURN`, pero ambas rutas de `runTurn()` omitían `sessionId` en `TURN_COMPLETE`. El worker permitía que cualquiera de las dos pestañas enviara resultados de cualquier rol y respondía `ok: true` aunque el job obsoleto se ignorara.
+- Corrección: propagar la identidad original en un único reporte terminal; validar sesión, job, rol permitido, booleano `ok`, job/rol activos y coincidencia exacta entre `sender.tab.id` y pestaña asignada al rol. Un rechazo de entrega no genera un segundo reporte y se registra separado del error de respuesta.
+- Chromium adjunta `sender.tab.id` como metadato al worker; el content script no lo falsifica.
+- Suite integrada añadida al workflow para éxito, fallo DOM controlado, identidad inválida/duplicada y respuesta posterior a STOP. Resultado definitivo pendiente de CI del SHA final exacto.
+- Chromium/Brave real, suspensión natural MV3 y cancelación cooperativa: `NOT_RUN`; BRIDGE sigue `PARTIAL / NOT_READY` hasta validar navegador real.
+- TIMER: tiempo medido no disponible; 2–5 h estimadas para esta tarea, 1–2 h adicionales para navegador real; estabilización BRIDGE 3–7 días, confianza baja.
