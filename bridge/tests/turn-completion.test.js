@@ -168,6 +168,14 @@ test("TURN_COMPLETE validates the active job, role, and source tab before forwar
   assert.ok(sent.at(-1).message.jobId);
 });
 
+test("content script rejects duplicate and invalid START_TURN job ids", () => {
+  const source = fs.readFileSync(path.join(root, "content.js"), "utf8");
+  assert.match(source, /const seenJobIds = new Set\(\)/);
+  assert.match(source, /if\s*\(!jobId\)\s*\{\s*sendResponse\(\{\s*ok:\s*false,\s*error:/);
+  assert.match(source, /if\s*\(seenJobIds\.has\(jobId\)\)\s*\{\s*sendResponse\(\{\s*ok:\s*true,\s*started:\s*false,\s*duplicate:\s*true\s*\}\)/);
+  assert.match(source, /seenJobIds\.add\(jobId\)/);
+});
+
 test("content script includes session identity and checks the completion acknowledgement", () => {
   const source = fs.readFileSync(path.join(root, "content.js"), "utf8");
   assert.match(source, /sessionId:\s*String\(message\.sessionId\s*\|\|\s*""\)/);
