@@ -90,8 +90,12 @@ async function harness(mode = "success") {
         sendMessage(message) { return call(message, { tab: { id: tabId } }); }
       }
     };
+    let fakeNow = 0;
+    class FastDate extends Date { static now() { fakeNow += 500; return fakeNow; } }
     const context = vm.createContext({
-      chrome, document, Date, setTimeout, clearTimeout, Promise, console,
+      chrome, document, Date: FastDate,
+      setTimeout: callback => { queueMicrotask(callback); return 1; }, clearTimeout: () => {},
+      Promise, console, queueMicrotask,
       InputEvent: class { constructor() {} }, Event: class { constructor() {} },
       HTMLInputElement: class {}, HTMLTextAreaElement: class {},
       getComputedStyle: () => ({ display: "block", visibility: "visible" })
@@ -123,7 +127,7 @@ async function harness(mode = "success") {
 async function flush(rounds = 40) { for (let i = 0; i < rounds; i++) await Promise.resolve(); }
 
 test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrectas", async t => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+
 
   // A: START_TURN del worker inicia el content script real; su respuesta vuelve al listener real.
   const h = await harness("success");
