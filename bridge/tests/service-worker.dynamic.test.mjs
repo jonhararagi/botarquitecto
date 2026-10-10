@@ -437,3 +437,75 @@ test("la respuesta del turno anterior se descarta después de iniciar un turno n
   assert.equal(after.iteration, 1);
   assert.equal(h.sent.length, sentBefore);
 });
+
+
+test("reinicializar el worker real conserva almacenamiento y no reenvía un turno ambiguo", async () => {
+  const h = await newHarness();
+  const activeId = (await h.state()).sessions[0].id;
+  const idleId = await createSession(h, "Inactiva conservada");
+  await start(h, activeId);
+  const beforeRestart = (await h.state()).sessions.find(s => s.id === activeId);
+  const oldJobId = beforeRestart.activeJobId;
+  const persistedBeforeRestart = h.persisted();
+
+  // A new VM runs the actual service-worker source against the same stored snapshot.
+  const restarted = await newHarness({ savedState: persistedBeforeRestart });
+  const state = await restarted.state();
+  const recovered = state.sessions.find(s => s.id === activeId);
+  const idle = state.sessions.find(s => s.id === idleId);
+
+  assert.equal(restarted.sent.length, 0, "hydration must never replay START_TURN");
+  assert.equal(recovered.running, false);
+  assert.equal(recovered.activeJobId, null);
+  assert.equal(recovered.activeRole, null);
+  assert.match(recovered.status, /ERROR.*resultado.*ambiguo/);
+  assert.equal(idle.status, "IDLE", "un estado inactivo no necesita recuperación");
+  assert.equal(idle.running, false);
+
+  const stale = await complete(restarted, recovered, {
+    jobId: oldJobId, role: "CEREBRO", text: "respuesta tras reinicio"
+  });
+  assert.equal(stale.ok, true);
+  const afterStale = (await restarted.state()).sessions.find(s => s.id === activeId);
+  assert.equal(afterStale.status, recovered.status);
+  assert.equal(afterStale.iteration, 0);
+  assert.equal(restarted.sent.length, 0);
+  assert.equal(restarted.persisted().bridgeStateV5.sessions.find(s => s.id === activeId).activeJobId, null);
+});
+
+test("la sesión pausada sin turno pendiente sigue pausada tras reinicializar el worker", async () => {
+  const h = await newHarness();
+  const id = (await h.state()).sessions[0].id;
+  await start(h, id);
+  let s = (await h.state()).sessions[0];
+  await h.call({ type: "PAUSE", sessionId: id });
+  await complete(h, s, { jobId: s.activeJobId, text: "resultado antes de pausar" });
+  s = (await h.state()).sessions[0];
+  assert.equal(s.paused, true);
+  assert.equal(s.activeJobId, null);
+
+  const restarted = await newHarness({ savedState: h.persisted() });
+  const recovered = (await restarted.state()).sessions[0];
+  assert.equal(recovered.running, false);
+  assert.equal(recovered.paused, true);
+  assert.equal(recovered.activeJobId, null);
+  assert.match(recovered.status, /^PAUSED/);
+  assert.equal(restarted.sent.length, 0, "la recuperación pausada no debe iniciar el siguiente turno");
+});
+
+test("un turno finalizado no se vuelve a procesar al reinicializar el worker", async () => {
+  const h = await newHarness();
+  const id = (await h.state()).sessions[0].id;
+  await start(h, id);
+  let s = (await h.state()).sessions[0];
+  await complete(h, s, { jobId: s.activeJobId, text: "TRABAJO TERMINADO" });
+  s = (await h.state()).sessions[0];
+  assert.equal(s.running, false);
+  assert.match(s.status, /^FINISHED/);
+
+  const restarted = await newHarness({ savedState: h.persisted() });
+  const recovered = (await restarted.state()).sessions[0];
+  assert.match(recovered.status, /^FINISHED/);
+  assert.equal(recovered.iteration, 0);
+  assert.equal(restarted.sent.length, 0);
+});
