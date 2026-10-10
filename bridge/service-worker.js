@@ -130,7 +130,20 @@ async function ensureTabAlive(tabId, role) {
   if (!isChatGPTTab(tab)) throw new Error(role + " ya no es una pestaña ChatGPT");
 }
 
-async function dispatchTurn(s, role, text) {
+// Coalesce concurrent dispatch attempts for one session. In particular, two RESUME
+// messages can arrive before ensureTabAlive() resolves; both must share one start.
+const dispatchPromises = new Map();
+function dispatchTurn(s, role, text) {
+  const existing = dispatchPromises.get(s.id);
+  if (existing) return existing;
+  const pending = dispatchTurnImpl(s, role, text);
+  dispatchPromises.set(s.id, pending);
+  return pending.finally(() => {
+    if (dispatchPromises.get(s.id) === pending) dispatchPromises.delete(s.id);
+  });
+}
+
+async function dispatchTurnImpl(s, role, text) {
   if (!s.running || s.stopRequested || s.paused) return;
   const tabId = role === "CEREBRO" ? s.brainTabId : s.workerTabId;
   const timeoutMs = role === "CEREBRO" ? s.brainTimeoutMs : s.workerTimeoutMs;
