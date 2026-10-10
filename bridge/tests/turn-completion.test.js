@@ -129,6 +129,13 @@ test("TURN_COMPLETE validates the active job, role, and source tab before forwar
   assert.ok(firstJob);
   assert.equal(sent.at(-1).tabId, 11);
 
+  const unauthorizedSource = await send(listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: firstJob,
+    role: "CEREBRO", ok: true, text: "response from an unrelated tab"
+  }, 33);
+  assert.equal(unauthorizedSource.ok, false, "a tab outside the session must never complete a job");
+  assert.match(unauthorizedSource.error, /Pestaña no autorizada/);
+
   const wrongSource = await send(listeners, {
     type: "TURN_COMPLETE", sessionId: session.id, jobId: firstJob,
     role: "CEREBRO", ok: true, text: "response from the wrong tab"
