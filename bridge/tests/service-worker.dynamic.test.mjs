@@ -54,9 +54,8 @@ function makeHarness({ savedState, sendMessage } = {}) {
     action: { onClicked: { addListener(fn) { listeners.clicked = fn; } } }
   };
   const sourcePromise = readFile(WORKER_PATH, "utf8");
-  let context;
   const ready = sourcePromise.then(source => {
-    context = vm.createContext({
+    const context = vm.createContext({
       chrome, crypto: webcrypto, structuredClone, Date, Math, Promise,
       console: { log() {}, warn() {}, error() {} }
     });
@@ -105,12 +104,6 @@ async function start(h, sessionId, overrides = {}) {
     type: "START_LOOP", sessionId, brainTabId: 11, workerTabId: 22,
     seed: "semilla de prueba", maxIterations: 5, ...overrides
   });
-}
-
-async function saveTabs(h, sessionId, brainTabId = 11, workerTabId = 22) {
-  const r = await h.call({ type: "SAVE_SESSION", sessionId, brainTabId, workerTabId });
-  assert.equal(r.ok, true, r.error);
-  return r.state.sessions.find(s => s.id === sessionId);
 }
 
 async function complete(h, session, { jobId, role = "CEREBRO", text = "respuesta", ok = true, error, senderTab = 11 } = {}) {
@@ -216,27 +209,36 @@ test("START_LOOP rechaza pestañas ausentes, idénticas, inexistentes o no permi
   }
 });
 
-test("START_LOOP concurrente impide que dos sesiones reserven la misma pestaña", async () => {
-  const h = await newHarness();
+test("START_LOOP concurrente impide reservar una pestaña ya ocupada con intercalado determinista", async () => {
+  const enteredSend = deferred();
+  const releaseSend = deferred();
+  let sends = 0;
+  const h = await newHarness({
+    sendMessage: async () => {
+      sends++;
+      if (sends === 1) {
+        enteredSend.resolve();
+        await releaseSend.promise;
+      }
+      return { ok: true };
+    }
+  });
   const first = (await h.state()).sessions[0].id;
   const second = await createSession(h, "Concurrente");
-  const gate = deferred();
-  let firstSend = true;
-  const original = h.tabs;
-  void original;
-  // La primera reserva queda bloqueada en sendMessage después de marcar running.
-  // El mock es específico de esta prueba y no sustituye la lógica del service worker.
-  const results = await Promise.all([
-    start(h, first),
-    start(h, second)
-  ]);
-  assert.equal(results[0].ok, true, results[0].error);
-  assert.equal(results[1].ok, false, "la segunda sesión no debe apropiarse de una pestaña reservada");
+
+  const firstStart = start(h, first);
+  await enteredSend.promise; // La primera sesión ya reservó running y llegó a sendMessage.
+  const secondResult = await start(h, second);
+  assert.equal(secondResult.ok, false, "la segunda sesión no debe apropiarse de una pestaña reservada");
+  releaseSend.resolve();
+  const firstResult = await firstStart;
+  assert.equal(firstResult.ok, true, firstResult.error);
+
   const state = await h.state();
   const active = state.sessions.filter(s => s.running);
   assert.equal(active.length, 1);
   assert.equal(new Set(active.flatMap(s => [s.brainTabId, s.workerTabId])).size, 2);
-  void gate; void firstSend;
+  assert.equal(sends, 1, "solo la sesión ganadora puede enviar un turno");
 });
 
 test("respuesta vigente se acepta una sola vez y despacha al otro rol", async () => {
@@ -327,7 +329,7 @@ test("STOP invalida la respuesta tardía y controles sobre otra sesión quedan a
   const id = (await h.state()).sessions[0].id;
   const other = await createSession(h, "Otra");
   await start(h, id);
-  let s = (await h.state()).sessions.find(x => x.id === id);
+  const s = (await h.state()).sessions.find(x => x.id === id);
   const job = s.activeJobId;
   await h.call({ type: "STOP", sessionId: id });
   const stopped = (await h.state()).sessions.find(x => x.id === id);
