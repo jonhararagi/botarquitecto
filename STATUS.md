@@ -122,3 +122,12 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 
 - **CI de código y regresiones:** GitHub Actions [run 38049251019](https://github.com/jonhararagi/botarquitecto/actions/runs/38049251019), `success` en SHA exacto `0627b0a207a3f130b73f81c543bc9106854918fe`. Pasaron sintaxis, contratos estáticos, suite dinámica del worker real en Node `vm` y timeout del content script con reloj simulado. Las tres pruebas nuevas A/B/C están incluidas en esa suite dinámica.
 - **Alcance de evidencia:** Node mocks, no Chromium. No se validan suspensión natural MV3 ni cancelación del polling. La anotación documental actual genera un SHA nuevo; comprobar también Actions en el HEAD final de documentación antes del cierre.
+
+
+## BRIDGE-007 — persistencia concurrente (CI pendiente)
+
+- `saveState()` ahora serializa las escrituras con un único escritor activo y agrupa solicitudes pendientes en batches. Se eliminó la reparación recursiva por revisión obsoleta.
+- Pruebas dinámicas añadidas: escrituras solapadas y coalescencia (3 solicitudes / 2 escrituras), STOP mientras una escritura antigua está pendiente (STOPPED es el estado persistido final), y rechazo de storage con propagación del error y recuperación mediante una solicitud posterior.
+- El error de una escritura se devuelve a sus propios llamadores; no se reintenta automáticamente. La cola es volátil y no añade campos al esquema. Si el worker termina antes de persistir una solicitud, se aplica la recuperación conservadora existente al reiniciar.
+- Estado actual: `PARTIAL` hasta verificar CI en el SHA final exacto. Pruebas locales no ejecutadas; Chrome/Brave real y suspensión natural MV3 siguen pendientes. No se modifican `content.js`, permisos ni dependencias. PR #6 abierto, sin merge.
+- TIMER: tiempo medido no disponible; 30–90 min estimados para CI/correcciones y 1–2 h para validación manual si hay navegador. Estabilización BRIDGE: 3–7 días, confianza baja.
