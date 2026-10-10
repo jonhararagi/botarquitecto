@@ -76,3 +76,11 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Comandos requeridos en CI:** `node --check bridge/service-worker.js`, `node --check bridge/content.js`, `node --check bridge/control.js`, `node --check bridge/popup.js`, `node --test bridge/tests/validation.test.mjs`, `node --test bridge/tests/service-worker.dynamic.test.mjs`, `node --test bridge/tests/content.timeout.test.mjs`. No se afirma que se hayan ejecutado localmente.
 - **TIMER:** tiempo invertido medido no disponible. Estimación restante 1–3 h para CI y correcciones; 1–3 h adicionales para navegador si está disponible. Estabilización total BRIDGE: 3–7 días, confianza baja.
 - **Siguiente tarea única recomendada:** BRIDGE-004 — validar en Chrome/Brave real el ciclo de vida MV3 y decidir con evidencia si STOP necesita cancelación activa del content script.
+
+
+## 2026-10-10 — BRIDGE-003 verificación CI posterior a cambios
+
+- **SHA exacto validado:** `dfa5a00fbb46061d6a5e39be633716bd3536ef59`.
+- **Evidencia:** `PASS_REAL` GitHub Actions [run 38035650008](https://github.com/jonhararagi/botarquitecto/actions/runs/38035650008), conclusión `success` sobre ese SHA. El workflow ejecutó comprobaciones de sintaxis, contratos estáticos, pruebas dinámicas del service worker y prueba del content script con reloj simulado.
+- **Importante:** esta CI valida la suite automatizada en Node, no suspensión natural ni reinicio real de Chromium. No se ejecutaron pruebas locales ni navegador gráfico; ambos siguen `NOT_RUN`.
+- **Estado:** automatización verificada para el SHA indicado; BRIDGE-003 continúa parcial por validación de navegador y limitación de cancelación al recibir STOP.
