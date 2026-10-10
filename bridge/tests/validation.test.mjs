@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 const workerPromise = read("../service-worker.js");
 const contentPromise = read("../content.js");
+const controlPromise = read("../control.js");
 const manifestPromise = read("../manifest.json");
 
 test("session creation uses the canonical session model factory", async () => {
@@ -44,7 +45,8 @@ test("content script rejects overlapping jobs and waits for a stable new respons
   assert.match(content, /if \(activeJobId && activeJobId !== message\.jobId\)/);
   assert.match(content, /current !== beforeText/);
   assert.match(content, /Date\.now\(\) - stableSince >= RESPONSE_STABLE_MS/);
-  assert.match(content, /No está disponible la opción «Copiar respuesta»/);
+  assert.match(content, /function responseTextFromSourceTurn\(/);
+  assert.doesNotMatch(content, /getCopyResponseButton|No está disponible la opción «Copiar respuesta»/);
   assert.ok(content.includes("sessionId: message.sessionId"));
   assert.ok(content.includes("response?.accepted !== true"));
 });
@@ -71,4 +73,12 @@ test("manifest remains MV3 with only the intended ChatGPT hosts", async () => {
   assert.ok(manifest.permissions.includes("storage"));
   assert.ok(!manifest.permissions.includes("debugger"));
   assert.ok(!manifest.permissions.includes("nativeMessaging"));
+});
+
+test("control panel preserves an edited iteration limit until it has been saved", async () => {
+  const control = await controlPromise;
+  assert.match(control, /iterationsDirty=false/);
+  assert.match(control, /if\(!iterationsDirty&&document\.activeElement!==iterations\)iterations\.value=x\.maxIterations\|\|10/);
+  assert.match(control, /iterations\.addEventListener\("input",\(\)=>\{iterationsDirty=true\}\)/);
+  assert.match(control, /iterationsDirty=false;iterations\.value=current\(\)\?\.maxIterations\|\|10/);
 });

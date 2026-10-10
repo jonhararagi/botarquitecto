@@ -54,16 +54,10 @@ async function harness(mode = "success") {
       matches: selector => selector === "textarea, input",
       dispatchEvent() {}, getAttribute() { return null; }
     };
-    const copy = { disabled: false, getAttribute() { return null; } };
-    const node = {
+      const node = {
       innerText: "respuesta integrada [[BRIDGE_DONE]]",
       textContent: "respuesta integrada [[BRIDGE_DONE]]",
-      querySelector(selector) {
-        if (selector.includes("copy-turn-action-button") || selector.includes("Copy response") ||
-            selector.includes("Copiar respuesta") || selector === 'button[aria-label="Copy" i]' ||
-            selector === 'button[aria-label="Copiar" i]') return copy;
-        return null;
-      },
+      querySelector() { return null; },
       closest() { return null; }, getAttribute() { return "assistant"; }
     };
     const assistant = [];
@@ -145,6 +139,7 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   assert.equal(report.jobId, active.activeJobId);
   assert.equal(report.role, "CEREBRO");
   assert.equal(report.ok, true);
+  assert.equal(report.text, "respuesta integrada", "the exact assistant response must be delivered without a copy-action button");
   const completed = (await h.state()).sessions[0];
   assert.equal(completed.iteration, 1);
   assert.match(completed.status, /^LIMIT_REACHED/);
