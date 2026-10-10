@@ -129,6 +129,13 @@ test("TURN_COMPLETE validates the active job, role, and source tab before forwar
   assert.ok(firstJob);
   assert.equal(sent.at(-1).tabId, 11);
 
+  const wrongSource = await send(listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: firstJob,
+    role: "CEREBRO", ok: true, text: "response from the wrong tab"
+  }, 22);
+  assert.equal(wrongSource.ok, false, "a valid job and role must still be rejected from the other assigned tab");
+  assert.match(wrongSource.error, /obsoleta o no coincidente/);
+
   const stale = await send(listeners, {
     type: "TURN_COMPLETE", sessionId: session.id, jobId: "wrong-job",
     role: "CEREBRO", ok: true, text: "stale response"
