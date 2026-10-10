@@ -181,3 +181,6 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 
 
 - BRIDGE-008 checkpoint: run [38055666417](https://github.com/jonhararagi/botarquitecto/actions/runs/38055666417) pasó sintaxis, contratos estáticos, suite dinámica del worker y timeout del content script, pero la nueva prueba integrada no observó el reporte terminal dentro del bucle de ticks. Se cambia el avance del reloj simulado a `runAll()` para drenar de forma determinista los timers pendientes; no se atribuye el fallo a producción sin aislarlo. Nueva CI pendiente.
+
+
+- BRIDGE-008 checkpoint: run [38055735149](https://github.com/jonhararagi/botarquitecto/actions/runs/38055735149) volvió a pasar sintaxis, contratos estáticos, suite dinámica y timeout. La integración aún no observó `TURN_COMPLETE`: el reloj se drenaba antes de que la cadena asíncrona inicial programara sus primeros timers. Se añade un vaciado de microtareas antes de avanzar el reloj, conservando timers simulados y sin usar sleeps reales. CI final pendiente.
