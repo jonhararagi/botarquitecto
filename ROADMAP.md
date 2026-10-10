@@ -11,11 +11,11 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 
 ## P1 — Integridad del bucle
 - [ ] Extraer funciones puras para validación de sesiones, límites y transiciones cuando sea viable.
-- [ ] Verificar en CI la suite dinámica de inicio, finalización, error, pausa, reanudación y parada añadida en BRIDGE-002.
+- [x] Ejecutar en CI la suite dinámica de inicio, finalización, error, pausa, reanudación y parada añadida en BRIDGE-002 (run 38033284641, success).
 - [ ] Probar que cada respuesta se reenvía como máximo una vez y solo al rol correcto.
 - [ ] Probar respuestas vacías, duplicadas, tardías, timeout y mensajes con marcador.
-- [ ] Confirmar con CI el test determinista de START_LOOP concurrentes y reserva de pestañas.
-- [ ] Completar la evidencia de aislamiento entre sesiones; los mocks nuevos comprueban la competencia por pestañas, pendiente de CI.
+- [x] Confirmar en CI el test determinista de START_LOOP concurrentes y reserva de pestañas (run 38033284641, success).
+- [x] Suite de mocks comprueba la competencia por pestañas y aislamiento entre sesiones (run 38033284641, success); queda pendiente validación en navegador real.
 
 ## P2 — Resiliencia Manifest V3
 - [ ] Definir qué ocurre al suspender/reiniciar service worker durante un turno.
@@ -53,7 +53,7 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 
 ## BRIDGE-002 — evidencia pendiente de cierre
 
-- [ ] Confirmar resultado verde de GitHub Actions para el SHA final de la rama.
+- [x] GitHub Actions run [38033284641](https://github.com/jonhararagi/botarquitecto/actions/runs/38033284641) terminó en success para el SHA de código `f4805811071ed775eb5a75245c8fa82c4ab71521`.
 - [ ] Mantener pendientes la validación manual en Chrome/Brave y la recuperación tras suspensión/reinicio real del service worker.
 - [ ] No declarar producción lista por pasar la suite dinámica de Node.
 
