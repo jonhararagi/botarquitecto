@@ -23,9 +23,9 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Branch:** `worker/bridge-001-validation`.
 - **Cambios:** `bridge/tests/validation.test.mjs`, `.github/workflows/bridge-validation.yml`, corrección de `createSessionObject()` inexistente a `createSessionModel()` en `bridge/service-worker.js`; estado y roadmap actualizados.
 - **Objetivo:** establecer validación reproducible sin dependencias externas y detectar regresiones contractuales clave.
-- **Evidencia:** `PASS_STATIC` inspección de fuentes y manifiesto; `NOT_RUN` ejecución de Node/CI/navegador al redactar esta entrada. No declarar CI aprobado hasta revisar el resultado real.
+- **Evidencia:** `PASS_STATIC` inspección de fuentes y manifiesto. `PASS_REAL` CI GitHub Actions, run [38025305570](https://github.com/jonhararagi/botarquitecto/actions/runs/38025305570), conclusión `success`; pasos de sintaxis y pruebas de contrato completados. `NOT_RUN` prueba manual de navegador.
 - **Limitaciones:** los tests actuales comprueban contratos mediante inspección de código; no ejecutan todavía el bucle de sesiones con mocks ni verifican concurrencia en un navegador real.
 - **Licencias/activos:** no se incorporaron materiales externos ni dependencias.
 - **TIMER restante:** 20–45 min revisar CI/diff; 30–60 min validación manual de navegador si disponible.
-- **Siguiente tarea única:** BRIDGE-001-VERIFY: revisar el workflow, corregir fallos y reportar evidencia real.
+- **Siguiente tarea única:** BRIDGE-002: diseñar pruebas dinámicas de transiciones de estado y concurrencia con mocks, conservando los límites de seguridad.
 
