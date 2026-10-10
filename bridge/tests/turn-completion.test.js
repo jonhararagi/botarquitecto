@@ -168,12 +168,48 @@ test("TURN_COMPLETE validates the active job, role, and source tab before forwar
   assert.ok(sent.at(-1).message.jobId);
 });
 
-test("content script rejects duplicate and invalid START_TURN job ids", () => {
+test("content script starts a job once and ignores duplicate START_TURN delivery", async () => {
   const source = fs.readFileSync(path.join(root, "content.js"), "utf8");
-  assert.match(source, /const seenJobIds = new Set\(\)/);
-  assert.match(source, /if\s*\(!jobId\)\s*\{\s*sendResponse\(\{\s*ok:\s*false,\s*error:/);
-  assert.match(source, /if\s*\(seenJobIds\.has\(jobId\)\)\s*\{\s*sendResponse\(\{\s*ok:\s*true,\s*started:\s*false,\s*duplicate:\s*true\s*\}\)/);
-  assert.match(source, /seenJobIds\.add\(jobId\)/);
+  let onMessage;
+  let inputQueries = 0;
+  const chrome = {
+    runtime: {
+      onMessage: { addListener(fn) { onMessage = fn; } },
+      sendMessage() { return Promise.resolve({ ok: true }); }
+    }
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === "#prompt-textarea") inputQueries++;
+      return [];
+    }
+  };
+  vm.runInNewContext(source, {
+    chrome, document,
+    getComputedStyle: () => ({ display: "block", visibility: "visible" }),
+    setTimeout, clearTimeout, console, Date, Math, String, Number, Boolean,
+    Array, Object, Promise, Error,
+    InputEvent: class InputEvent {}, Event: class Event {},
+    HTMLInputElement: class HTMLInputElement {},
+    HTMLTextAreaElement: class HTMLTextAreaElement {}
+  }, { filename: "content.js" });
+
+  const dispatch = (message) => new Promise(resolve => onMessage(message, {}, resolve));
+  const first = await dispatch({ type: "START_TURN", jobId: "job-duplicate", text: "hello" });
+  assert.equal(first.ok, true);
+  assert.equal(first.started, true);
+  const queriesAfterFirst = inputQueries;
+
+  const duplicateWhileActive = await dispatch({ type: "START_TURN", jobId: "job-duplicate", text: "hello" });
+  assert.equal(duplicateWhileActive.duplicate, true);
+  assert.equal(inputQueries, queriesAfterFirst, "a duplicate must not start another input search");
+
+  await dispatch({ type: "CANCEL_TURN", jobId: "job-duplicate" });
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  const duplicateAfterCompletion = await dispatch({ type: "START_TURN", jobId: "job-duplicate", text: "hello" });
+  assert.equal(duplicateAfterCompletion.duplicate, true);
+  assert.equal(inputQueries, queriesAfterFirst, "a completed job id must not be submitted again");
 });
 
 test("content script includes session identity and checks the completion acknowledgement", () => {
