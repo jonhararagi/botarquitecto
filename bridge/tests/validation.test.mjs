@@ -44,6 +44,17 @@ test("content script rejects overlapping jobs and waits for a stable new respons
   assert.match(content, /No está disponible la opción «Copiar respuesta»/);
 });
 
+test("saveState serializes writes, coalesces pending requests, and does not recurse on stale revisions", async () => {
+  const worker = await workerPromise;
+  assert.match(worker, /let saveQueueRunning = false/);
+  assert.match(worker, /let pendingSaveWaiters = \[\]/);
+  assert.match(worker, /async function drainSaveQueue\(\)/);
+  assert.match(worker, /await chrome\.storage\.local\.set\(\{ \[STORAGE_KEY\]: payload \}\)/);
+  assert.match(worker, /for \(const waiter of batch\) waiter\.reject\(error\)/);
+  assert.doesNotMatch(worker, /saveRevision/);
+  assert.doesNotMatch(worker, /if \(revision !== saveRevision\) await saveState\(\)/);
+});
+
 test("manifest remains MV3 with only the intended ChatGPT hosts", async () => {
   const manifest = JSON.parse(await manifestPromise);
   assert.equal(manifest.manifest_version, 3);
