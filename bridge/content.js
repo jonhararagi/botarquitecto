@@ -22,6 +22,9 @@ const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
 const RESPONSE_STABLE_MS = 2000;
 let activeJobId = null;
 let activeJobCancelled = false;
+// Deduplicate START_TURN delivery per tab, including retries arriving after completion.
+const seenJobIds = new Set();
+const MAX_SEEN_JOB_IDS = 100;
 
 function firstVisible(selectors) {
   for (const selector of selectors) {
@@ -274,14 +277,29 @@ async function runTurn(message) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "START_TURN") {
-    if (activeJobId && activeJobId !== message.jobId) {
+    const jobId = String(message.jobId || "");
+    if (!jobId) {
+      sendResponse({ ok: false, error: "START_TURN requiere un jobId válido" });
+      return;
+    }
+    if (seenJobIds.has(jobId)) {
+      sendResponse({ ok: true, started: false, duplicate: true });
+      return;
+    }
+    if (activeJobId) {
       sendResponse({ ok: false, error: "Esta pestaña ya está ejecutando otro turno" });
       return;
     }
 
-    activeJobId = String(message.jobId || "");
+    // Record before starting asynchronous work so a duplicate delivery cannot
+    // submit the same prompt twice, even after the first turn has completed.
+    seenJobIds.add(jobId);
+    if (seenJobIds.size > MAX_SEEN_JOB_IDS) {
+      seenJobIds.delete(seenJobIds.values().next().value);
+    }
+    activeJobId = jobId;
     activeJobCancelled = false;
-    runTurn({ ...message, role: message.role || "ChatGPT" });
+    runTurn({ ...message, jobId, role: message.role || "ChatGPT" });
     sendResponse({ ok: true, started: true });
     return;
   }
