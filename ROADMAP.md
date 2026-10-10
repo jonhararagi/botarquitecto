@@ -98,3 +98,9 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 **Estado:** `PARTIAL / NOT_READY`. El último run verificado antes de la documentación es [38035719789](https://github.com/jonhararagi/botarquitecto/actions/runs/38035719789), `success` en `69626bcaf814a4b5f00e482f8ba75fa9f396233d`. Es evidencia de automatización Node, no de Chromium. No hay corrección de producción porque no se ha reproducido un defecto real.
 
 **Siguiente tarea única:** ejecutar el protocolo manual BRIDGE-004 en un Chrome o Brave accesible y adjuntar evidencia técnica no sensible.
+
+
+### BRIDGE-004 — checkpoint CI de documentación
+
+- [x] CI completada en el SHA `c7772931d5152da0922765f552cafcbff4761802`: [run 38036355246](https://github.com/jonhararagi/botarquitecto/actions/runs/38036355246), `success`.
+- [ ] Ejecutar y documentar la validación real de Chrome/Brave; la CI verde no la reemplaza.

@@ -80,3 +80,11 @@
 - **TIMER:** tiempo invertido medido no disponible. Estimación restante para completar BRIDGE-004: 1–3 h de validación manual una vez disponible un navegador conectado, más 30–60 min para registrar evidencias y reconciliar CI/documentación. BRIDGE global: 3–7 días de trabajo concentrado, confianza baja; recalibrar tras las pruebas reales.
 
 Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 incluidas en entradas anteriores. El porcentaje global sigue en 15% con confianza baja; no se aumenta sin evidencia adicional.
+
+
+### BRIDGE-004 — verificación de CI documental
+
+- **SHA validado:** `c7772931d5152da0922765f552cafcbff4761802`.
+- **CI:** `PASS_REAL`, GitHub Actions [run 38036355246](https://github.com/jonhararagi/botarquitecto/actions/runs/38036355246), conclusión `success` sobre ese SHA exacto. Pasaron sintaxis, contratos estáticos, pruebas dinámicas del service worker y test de timeout del content script con reloj simulado.
+- **No cubre:** navegador real, suspensión natural MV3 ni STOP durante un turno real. Esos escenarios siguen `NOT_RUN`.
+- Este resultado corresponde al SHA indicado; la siguiente actualización documental, si la hubiera, requiere comprobar CI de nuevo sobre su propio HEAD.

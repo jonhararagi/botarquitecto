@@ -101,3 +101,11 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Limitación/decisión:** el objetivo central de BRIDGE-004 sigue bloqueado por falta de navegador real. Estado `PARTIAL / NOT_READY`; PR #6 sigue abierto, sin merge y sin escritura en `main`.
 - **TIMER:** tiempo invertido medido no disponible. Estimación restante 1–3 h de prueba manual con navegador conectado, más 30–60 min de reconciliación de evidencias y CI. Estimación de estabilización BRIDGE: 3–7 días de trabajo concentrado, confianza baja.
 - **Siguiente tarea única:** ejecutar el protocolo manual de BRIDGE-004 en Chrome o Brave real y aportar los resultados técnicos sin datos privados.
+
+
+### BRIDGE-004 — checkpoint de CI para el protocolo documental
+
+- **SHA validado:** `c7772931d5152da0922765f552cafcbff4761802`.
+- **Evidencia:** `PASS_REAL`, [GitHub Actions run 38036355246](https://github.com/jonhararagi/botarquitecto/actions/runs/38036355246), conclusión `success` sobre el SHA exacto. Los siete pasos de sintaxis, contratos estáticos, pruebas dinámicas y timeout con reloj simulado terminaron en `success`.
+- **Alcance:** CI automatizada Node. No prueba Chrome/Brave real, suspensión natural MV3, reinicio del navegador ni polling real tras STOP.
+- **Estado:** BRIDGE-004 sigue `PARTIAL / NOT_READY` hasta ejecutar la validación real descrita en `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md`.
