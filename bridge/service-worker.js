@@ -162,6 +162,17 @@ async function dispatchTurn(s, role, text) {
       }
     }
   } catch (error) {
+    // If STOP won the race while START_TURN was in flight, a failed late
+    // acknowledgement must not overwrite STOPPED with ERROR. Best-effort
+    // cancellation also covers tabs that may have received the start.
+    if (!s.running || s.stopRequested || s.activeJobId !== jobId) {
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: "CANCEL_TURN", jobId });
+      } catch {
+        // The session is already stopped or the tab is unavailable.
+      }
+      return;
+    }
     throw new Error(role + " no responde. Recarga esa pestaña ChatGPT para cargar BRIDGE. " + (error?.message || ""));
   }
 }
