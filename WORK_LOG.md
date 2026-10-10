@@ -124,3 +124,20 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Estado:** `PARTIAL / DESIGN_ONLY`, no listo para producción.
 - **TIMER:** tiempo medido no disponible; auditoría/documentación estimada 2–4 h (confianza media); implementación futura si se autoriza 2–6 h iniciales (confianza baja); estabilización BRIDGE 3–7 días de trabajo concentrado (confianza baja).
 - **Siguiente tarea única:** preparar tests deterministas de los intercalados STOP/dispatchTurn/finishTurn antes de implementar cancelación de producción.
+
+
+## 2026-10-10 — BRIDGE-006 STOP interleavings and worker guards
+
+- **HEAD de entrada declarado:** `b0711cbb2d19a5ab706c04f1f718ff1784b584c9`. La inspección remota confirmó ese SHA en la rama antes de iniciar los cambios; `main` permanece en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`. PR #6 abierto, sin merge.
+- **Limitación del entorno:** se intentó `git clone` para ejecutar las pruebas localmente, pero el entorno no pudo resolver `github.com`. No se afirma ejecución local. La validación automatizada queda a cargo de GitHub Actions.
+- **Reproducción añadida al arnés real Node `vm`:** (A) STOP mientras `tabs.get()` está diferido, seguido de excepción tardía; (B) STOP mientras la persistencia de un resultado está diferida en `finishTurn()`; (C) STOP y nuevo START antes de liberar la espera del trabajo anterior, caso ABA. Las barreras son promesas diferidas, sin `setTimeout()`.
+- **Corrección de producción:** `bridge/service-worker.js` añade una identidad de ejecución solo en memoria por sesión, la invalida con STOP y la reemplaza con cada START. `dispatchTurn()` revalida tras `ensureTabAlive()`, persistencia, log y antes/después del envío; los errores de una ejecución invalidada no pueden marcar ERROR en una ejecución posterior. `finishTurn()` vuelve a validar tras las escrituras asíncronas antes de avanzar iteration/lastForwarded o despachar el siguiente rol.
+- **Persistencia:** `saveState()` serializa un snapshot y detecta escrituras que terminaron obsoletas; si una escritura antigua termina después de una mutación más reciente, vuelve a persistir el estado actual. No se añade un campo al esquema persistido.
+- **Arnés:** `bridge/tests/service-worker.dynamic.test.mjs` permite controlar `tabs.get()` y una operación de storage por invocación; las pruebas nuevas ejecutan el service worker real y no exportan funciones privadas ni añaden hooks a producción.
+- **Mensajes reales/alcance:** no se añade `CANCEL_TURN`, no se modifica `bridge/content.js`, no se cambian permisos ni dependencias y no se envían prompts reales a ChatGPT.
+- **Comprobación local:** `NOT_RUN` por falta de acceso DNS/red a GitHub; los comandos locales requeridos no se reportan como ejecutados. Consultar Actions sobre el SHA final antes de marcar la regresión automatizada como PASS.
+- **Chromium real:** `NOT_RUN`; el VM Node no demuestra suspensión natural/reactivación MV3 ni cancela el polling de content script.
+- **Commits de código/tests:** `155937c184c170b7b1febfff6a6c9920383aadb6` (identidad y guardas del worker), `7d716afcac7282c6a07ab14ff356400978b9b6d2` (reparación de persistencia obsoleta), `e66b482d7bb4f8b850f46e95cce4955ef52cf415` (pruebas A/B/C).
+- **Estado provisional:** `PARTIAL` hasta verificar CI en el SHA final exacto. PR #6 continúa abierto y sin merge; no se escribió en `main`.
+- **TIMER:** tiempo real medido no disponible. Estimación restante: 30–90 min para CI, corregir fallos y reconciliar evidencias; 1–3 h adicionales para navegador real si se dispone de Chrome/Brave. Estabilización BRIDGE: 3–7 días de trabajo concentrado, confianza baja.
+- **Siguiente tarea única:** revisar el resultado de CI en el SHA final y corregir únicamente los fallos que reproduzca esa suite antes de iniciar la tarea separada de cancelación cooperativa.
