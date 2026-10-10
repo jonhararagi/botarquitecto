@@ -699,3 +699,132 @@ test("STOP y START nuevo mientras dispatchTurn antiguo espera: no hay ABA ni env
   assert.equal(afterStale.iteration, 0);
   assert.equal(h.sent.length, 1);
 });
+
+
+test("saveState serializa escrituras y agrupa solicitudes concurrentes sin recursión", async () => {
+  const firstEntered = deferred();
+  const releaseFirst = deferred();
+  const secondEntered = deferred();
+  const releaseSecond = deferred();
+  let armed = false;
+  let calls = 0;
+  const snapshots = [];
+  const h = await newHarness({ setStorage: async (value, defaultSet) => {
+    if (!armed) { defaultSet(value); return; }
+    calls++;
+    snapshots.push(structuredClone(value.bridgeStateV5));
+    if (calls === 1) {
+      firstEntered.resolve();
+      await releaseFirst.promise;
+    } else if (calls === 2) {
+      secondEntered.resolve();
+      await releaseSecond.promise;
+    }
+    defaultSet(value);
+  } });
+  const id = (await h.state()).sessions[0].id;
+  armed = true;
+
+  const pauseWrite = h.call({ type: "PAUSE", sessionId: id });
+  await firstEntered.promise;
+  const stopWrite = h.call({ type: "STOP", sessionId: id });
+  const selectWrite = h.call({ type: "SELECT_SESSION", sessionId: id });
+  const inMemory = await h.state();
+  assert.equal(inMemory.sessions[0].status, "STOPPED");
+  assert.equal(calls, 1, "no debe comenzar una segunda escritura mientras la primera sigue pendiente");
+
+  releaseFirst.resolve();
+  await secondEntered.promise;
+  assert.equal(calls, 2, "las solicitudes posteriores deben coalescerse en un único snapshot");
+  assert.equal(snapshots[0].sessions[0].status, "PAUSED — esperando terminar el turno actual");
+  assert.equal(snapshots[1].sessions[0].status, "STOPPED");
+  assert.equal(h.persisted().bridgeStateV5.sessions[0].status, "PAUSED — esperando terminar el turno actual",
+    "la escritura STOP aún no ha terminado y no debe considerarse persistida");
+
+  releaseSecond.resolve();
+  const [pauseResult, stopResult, selectResult] = await Promise.all([pauseWrite, stopWrite, selectWrite]);
+  assert.equal(pauseResult.ok, true);
+  assert.equal(stopResult.ok, true);
+  assert.equal(selectResult.ok, true);
+  assert.equal(calls, 2, "tres solicitudes concurrentes requieren solo dos escrituras físicas");
+  assert.equal(h.persisted().bridgeStateV5.sessions[0].status, "STOPPED");
+});
+
+test("STOP durante una escritura antigua persiste STOPPED al final sin ciclo de reparación", async () => {
+  const oldEntered = deferred();
+  const releaseOld = deferred();
+  const terminalEntered = deferred();
+  const releaseTerminal = deferred();
+  let armed = false;
+  let calls = 0;
+  const h = await newHarness({ setStorage: async (value, defaultSet) => {
+    if (!armed) { defaultSet(value); return; }
+    calls++;
+    if (calls === 1) { oldEntered.resolve(); await releaseOld.promise; }
+    else if (calls === 2) { terminalEntered.resolve(); await releaseTerminal.promise; }
+    defaultSet(value);
+  } });
+  const id = (await h.state()).sessions[0].id;
+  armed = true;
+
+  const oldOperation = h.call({ type: "PAUSE", sessionId: id });
+  await oldEntered.promise;
+  const stopOperation = h.call({ type: "STOP", sessionId: id });
+  assert.equal((await h.state()).sessions[0].status, "STOPPED");
+  releaseOld.resolve();
+  await terminalEntered.promise;
+  assert.equal(h.persisted().bridgeStateV5.sessions[0].status, "PAUSED — esperando terminar el turno actual");
+  assert.equal(calls, 2);
+  releaseTerminal.resolve();
+
+  const [oldResult, stopResult] = await Promise.all([oldOperation, stopOperation]);
+  assert.equal(oldResult.ok, true);
+  assert.equal(stopResult.ok, true);
+  const memory = (await h.state()).sessions[0];
+  const persisted = h.persisted().bridgeStateV5.sessions[0];
+  for (const session of [memory, persisted]) {
+    assert.equal(session.status, "STOPPED");
+    assert.equal(session.running, false);
+    assert.equal(session.stopRequested, true);
+    assert.equal(session.activeJobId, null);
+    assert.equal(session.activeRole, null);
+  }
+  assert.equal(calls, 2, "no debe aparecer una tercera escritura de reparación");
+});
+
+test("saveState propaga un rechazo y permite que una solicitud posterior recupere la cola", async () => {
+  const firstEntered = deferred();
+  const releaseFailure = deferred();
+  const secondEntered = deferred();
+  let armed = false;
+  let calls = 0;
+  const h = await newHarness({ setStorage: async (value, defaultSet) => {
+    if (!armed) { defaultSet(value); return; }
+    calls++;
+    if (calls === 1) {
+      firstEntered.resolve();
+      await releaseFailure.promise;
+      throw new Error("storage write rejected deterministically");
+    }
+    if (calls === 2) secondEntered.resolve();
+    defaultSet(value);
+  } });
+  const id = (await h.state()).sessions[0].id;
+  armed = true;
+
+  const failedOperation = h.call({ type: "PAUSE", sessionId: id });
+  await firstEntered.promise;
+  const recoveryOperation = h.call({ type: "STOP", sessionId: id });
+  assert.equal((await h.state()).sessions[0].status, "STOPPED");
+  releaseFailure.resolve();
+
+  const failedResult = await failedOperation;
+  assert.equal(failedResult.ok, false);
+  assert.match(failedResult.error, /storage write rejected deterministically/);
+  await secondEntered.promise;
+  const recoveredResult = await recoveryOperation;
+  assert.equal(recoveredResult.ok, true, recoveredResult.error);
+  assert.equal(calls, 2, "el fallo no debe activar reintentos automáticos ni recursivos");
+  assert.equal(h.persisted().bridgeStateV5.sessions[0].status, "STOPPED");
+  assert.equal((await h.state()).sessions[0].status, "STOPPED");
+});
