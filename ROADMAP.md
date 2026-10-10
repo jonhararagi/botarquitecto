@@ -144,3 +144,12 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 
 - **CI de código y regresiones:** GitHub Actions [run 38049251019](https://github.com/jonhararagi/botarquitecto/actions/runs/38049251019), `success` en SHA exacto `0627b0a207a3f130b73f81c543bc9106854918fe`. Pasaron sintaxis, contratos estáticos, suite dinámica del worker real en Node `vm` y timeout del content script con reloj simulado. Las tres pruebas nuevas A/B/C están incluidas en esa suite dinámica.
 - **Alcance de evidencia:** Node mocks, no Chromium. No se validan suspensión natural MV3 ni cancelación del polling. La anotación documental actual genera un SHA nuevo; comprobar también Actions en el HEAD final de documentación antes del cierre.
+
+
+## BRIDGE-007 — cola de persistencia serializada
+
+- [x] Sustituir `saveRevision` y la reparación recursiva por un escritor único con coalescencia de solicitudes pendientes.
+- [x] Añadir regresiones deterministas para orden de escritura, STOP terminal y rechazo/recuperación de storage.
+- [ ] Verificar todas las comprobaciones en GitHub Actions sobre el SHA final exacto.
+- [ ] Ejecutar protocolo manual en Chrome/Brave real; Node VM no demuestra el ciclo de vida natural MV3.
+- [ ] Mantener BRIDGE como `PARTIAL / NOT_READY` hasta disponer de validación de navegador.
