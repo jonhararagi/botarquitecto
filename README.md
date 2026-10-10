@@ -71,4 +71,5 @@ No marques el lanzamiento como GREEN completo mientras los casos obligatorios no
 ## Documentación
 
 - [Arquitectura y uso de BRIDGE](bridge/README.md)
+- [Política de seguridad y reporte de vulnerabilidades](SECURITY.md)
 - [Checklist manual E2E](bridge/MANUAL-E2E-CHECKLIST.md) — disponible en la rama de recuperación
