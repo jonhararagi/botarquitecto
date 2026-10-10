@@ -161,3 +161,13 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 
 
 - BRIDGE-008 checkpoint: run [38055735149](https://github.com/jonhararagi/botarquitecto/actions/runs/38055735149) volvió a pasar sintaxis, contratos estáticos, suite dinámica y timeout. La integración aún no observó `TURN_COMPLETE`: el reloj se drenaba antes de que la cadena asíncrona inicial programara sus primeros timers. Se añade un vaciado de microtareas antes de avanzar el reloj, conservando timers simulados y sin usar sleeps reales. CI final pendiente.
+
+### BRIDGE-008 — finalización integrada
+
+- **Estado:** `PARTIAL` hasta confirmar CI del SHA final exacto.
+- El contrato de producción ya transmite la identidad original en éxito/error y valida `sessionId`, `jobId`, `role` y `sender.tab.id` contra la pestaña asignada a ese rol.
+- El test integrado ahora incluye el caso de pestaña equivocada que declara el rol correcto y comprueba que los errores conservan `jobId`. El content script no reintenta la entrega ni afirma aceptación si no recibe `{ok:true, accepted:true}`.
+- La prueba de integración usa el content script y service worker reales con DOM/API de Chrome simulados; el reloj simulado se avanza por ticks para no adelantar el tiempo antes de programar el polling.
+- **Pendiente:** CI final exacta y validación manual Chrome/Brave. Los mocks no prueban suspensión real del service worker ni cancelación de generación externa.
+- **TIMER:** tiempo medido no disponible; estimación 2–5 h de tarea, 1–2 h de validación manual; estabilización BRIDGE restante 3–7 días, confianza baja.
+
