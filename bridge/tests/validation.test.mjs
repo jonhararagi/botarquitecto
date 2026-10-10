@@ -31,13 +31,14 @@ test("iteration and timeout settings are bounded before execution", async () => 
 
 test("TURN_COMPLETE validates session, active job, role, sender tab, and acceptance", async () => {
   const worker = await workerPromise;
-  assert.match(worker, /senderTabId !== assignedTabId/);
-  assert.match(worker, /s\\.activeRole !== role/);
-  assert.match(worker, /typeof message\\.ok !== "boolean"/);
-  assert.match(worker, /s\\.activeJobId !== jobId/);
-  assert.match(worker, /accepted: true/);
-  assert.match(worker, /if \\(!sessionId \\|\\| !jobId/);
+  assert.ok(worker.includes("senderTabId !== assignedTabId"));
+  assert.ok(worker.includes("s.activeRole !== role"));
+  assert.ok(worker.includes('typeof message.ok !== "boolean"'));
+  assert.ok(worker.includes("s.activeJobId !== jobId"));
+  assert.ok(worker.includes("accepted: true"));
+  assert.ok(worker.includes("if (!sessionId || !jobId"));
 });
+
 test("content script rejects overlapping jobs and waits for a stable new response", async () => {
   const content = await contentPromise;
   assert.match(content, /if \(activeJobId && activeJobId !== message\.jobId\)/);
