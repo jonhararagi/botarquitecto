@@ -687,3 +687,63 @@ test("STOP during tab validation preserves STOPPED when validation rejects late"
   assert.equal(finalSession.activeRole, null);
   assert.equal(worker.sent.some(item => item.message.type === "START_TURN"), false);
 });
+
+test("concurrent RESUME requests dispatch only one turn for a session", async () => {
+  let blockValidation = false;
+  let enteredResolve;
+  let releaseResolve;
+  const enteredGet = new Promise(resolve => { enteredResolve = resolve; });
+  const releaseGet = new Promise(resolve => { releaseResolve = resolve; });
+  const worker = await readyWorker({
+    async beforeGet(id) {
+      if (id === 22 && blockValidation) {
+        enteredResolve();
+        await releaseGet;
+      }
+    }
+  });
+
+  const initial = await send(worker.listeners, { type: "GET_STATE" });
+  const session = initial.state.sessions[0];
+  const started = await send(worker.listeners, {
+    type: "START_LOOP", sessionId: session.id, brainTabId: 11, workerTabId: 22,
+    seed: "Concurrent RESUME regression", maxIterations: 10, brainTimeoutMs: 60000,
+    workerTimeoutMs: 600000, minTurnDelayMs: 0
+  });
+  const first = started.state.sessions.find(item => item.id === session.id);
+  assert.ok(first.activeJobId);
+
+  const paused = await send(worker.listeners, { type: "PAUSE", sessionId: session.id });
+  assert.equal(paused.ok, true);
+  const brainDone = await send(worker.listeners, {
+    type: "TURN_COMPLETE", sessionId: session.id, jobId: first.activeJobId,
+    role: "CEREBRO", ok: true, text: "Brain response before resume"
+  }, 11);
+  assert.equal(brainDone.ok, true);
+
+  const readyToResume = await send(worker.listeners, { type: "GET_STATE" });
+  const pausedSession = readyToResume.state.sessions.find(item => item.id === session.id);
+  assert.equal(pausedSession.running, true);
+  assert.equal(pausedSession.paused, true);
+  assert.equal(pausedSession.activeJobId, null);
+
+  blockValidation = true;
+  const resumeA = send(worker.listeners, { type: "RESUME", sessionId: session.id });
+  await enteredGet;
+  const resumeB = send(worker.listeners, { type: "RESUME", sessionId: session.id });
+  releaseResolve();
+  const [resultA, resultB] = await Promise.all([resumeA, resumeB]);
+
+  assert.equal(resultA.ok, true);
+  assert.equal(resultB.ok, true);
+  const startsForWorker = worker.sent.filter(item =>
+    item.tabId === 22 && item.message.type === "START_TURN"
+  );
+  assert.equal(startsForWorker.length, 1, "concurrent RESUME calls must share one dispatch");
+  const finalState = await send(worker.listeners, { type: "GET_STATE" });
+  const resumed = finalState.state.sessions.find(item => item.id === session.id);
+  assert.equal(resumed.running, true);
+  assert.equal(resumed.activeRole, "OBRERO");
+  assert.ok(resumed.activeJobId);
+});
+
