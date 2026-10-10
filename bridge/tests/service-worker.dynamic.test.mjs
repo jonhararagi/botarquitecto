@@ -726,6 +726,7 @@ test("saveState serializa escrituras y agrupa solicitudes concurrentes sin recur
     defaultSet(value);
   } });
   const id = (await h.state()).sessions[0].id;
+  await start(h, id);
   armed = true;
 
   const pauseWrite = h.call({ type: "PAUSE", sessionId: id });
@@ -768,6 +769,7 @@ test("STOP durante una escritura antigua persiste STOPPED al final sin ciclo de 
     defaultSet(value);
   } });
   const id = (await h.state()).sessions[0].id;
+  await start(h, id);
   armed = true;
 
   const oldOperation = h.call({ type: "PAUSE", sessionId: id });
@@ -813,6 +815,7 @@ test("saveState propaga un rechazo y permite que una solicitud posterior recuper
     defaultSet(value);
   } });
   const id = (await h.state()).sessions[0].id;
+  await start(h, id);
   armed = true;
 
   const failedOperation = h.call({ type: "PAUSE", sessionId: id });
