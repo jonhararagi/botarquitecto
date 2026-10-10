@@ -130,7 +130,7 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   const active = (await h.state()).sessions[0];
   const content = await h.getContent(11);
   assert.ok(active.activeJobId);
-  for (let i = 0; i < 14; i++) { t.mock.timers.tick(250); await flush(); }
+  t.mock.timers.runAll();\n  await flush(100);
   const report = content.messages.find(m => m.type === "TURN_COMPLETE");
   assert.ok(report, "el content script real debe enviar TURN_COMPLETE");
   assert.equal(report.sessionId, h.sessionId);
