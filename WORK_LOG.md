@@ -145,3 +145,7 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 
 - **Checkpoint CI intermedio:** run [38049197793](https://github.com/jonhararagi/botarquitecto/actions/runs/38049197793) falló en `bridge/tests/validation.test.mjs` porque un contrato estático esperaba la llamada antigua a `failSession()` sin token. La sintaxis pasó; las suites dinámicas no se ejecutaron en ese run. Se ajustó el contrato para exigir el token de ejecución. Esto fue un desajuste de la prueba estática tras el cambio de firma, no evidencia de que las pruebas A/B/C fallaran.
 - **Corrección del contrato:** commit `69a29da8b2837f3b495ded81b4cf9941ef05bd98`. CI posterior para el SHA final aún pendiente de consulta; no marcar PASS hasta verificarlo.
+
+
+- **CI de código y regresiones:** GitHub Actions [run 38049251019](https://github.com/jonhararagi/botarquitecto/actions/runs/38049251019), `success` en SHA exacto `0627b0a207a3f130b73f81c543bc9106854918fe`. Pasaron sintaxis, contratos estáticos, suite dinámica del worker real en Node `vm` y timeout del content script con reloj simulado. Las tres pruebas nuevas A/B/C están incluidas en esa suite dinámica.
+- **Alcance de evidencia:** Node mocks, no Chromium. No se validan suspensión natural MV3 ni cancelación del polling. La anotación documental actual genera un SHA nuevo; comprobar también Actions en el HEAD final de documentación antes del cierre.
