@@ -5,8 +5,8 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 ## P0 — Control del proyecto y reproducibilidad
 - [x] Definir protocolo CEREBRO/OBRERO y reglas de evidencia.
 - [x] Registrar línea base inicial, riesgos y próxima tarea.
-- [ ] Crear validaciones automatizadas reproducibles y documentar cómo ejecutarlas.
-- [ ] Añadir CI para validaciones estáticas y pruebas unitarias.
+- [x] Crear validaciones automatizadas reproducibles y documentar cómo ejecutarlas (suite inicial de contratos estáticos; pendiente validar CI).
+- [x] Añadir CI para validaciones estáticas y pruebas de contrato (`.github/workflows/bridge-validation.yml`; estado de ejecución pendiente).
 - [ ] Establecer política de versiones y registro de cambios.
 
 ## P1 — Integridad del bucle
