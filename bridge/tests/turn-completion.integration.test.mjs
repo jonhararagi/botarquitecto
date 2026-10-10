@@ -18,6 +18,7 @@ async function harness(mode = "success") {
   const storage = {};
   const ready = deferred();
   const contents = new Map();
+  const starts = [];
   const contentSource = await readFile(contentPath, "utf8");
   const workerChrome = {
     storage: { local: {
@@ -29,7 +30,7 @@ async function harness(mode = "success") {
       onRemoved: { addListener(fn) { callbacks.removed = fn; } },
       async query() { return [...tabs.values()]; },
       async get(id) { if (!tabs.has(id)) throw new Error("tab missing"); return { ...tabs.get(id) }; },
-      async sendMessage(tabId, message) { const c = await getContent(tabId); c.listener(message, {}, () => {}); return { ok: true }; },
+      async sendMessage(tabId, message) { starts.push({ tabId, message: structuredClone(message) }); return { ok: true }; },
       async create() { throw new Error("unexpected tab create"); },
       async update() {}
     },
@@ -121,7 +122,7 @@ async function harness(mode = "success") {
   const start = await call({ type: "START_LOOP", sessionId, brainTabId: 11, workerTabId: 22,
     seed: "prompt sintético", maxIterations: 1, brainTimeoutMs: 5000, workerTimeoutMs: 5000 });
   assert.equal(start.ok, true, start.error);
-  return { call, sessionId, contents, getContent, state: async () => (await call({ type: "GET_STATE" })).state };
+  return { call, sessionId, contents, starts, getContent, state: async () => (await call({ type: "GET_STATE" })).state };
 }
 
 async function flush(rounds = 40) { for (let i = 0; i < rounds; i++) await Promise.resolve(); }
@@ -134,9 +135,9 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   const active = (await h.state()).sessions[0];
   const content = await h.getContent(11);
   assert.ok(active.activeJobId);
-  // DOM controlado: se deja transcurrir la ventana de estabilidad real (2 s)
-  // del content script. No se conecta a ChatGPT ni se sustituye su lógica.
-  await new Promise(resolve => setTimeout(resolve, 2200));
+  const startMessage = h.starts.find(item => item.message.type === "START_TURN").message;
+  assert.equal(startMessage.sessionId, h.sessionId);
+  content.listener(startMessage, {}, () => {});
   await flush(100);
   const report = content.messages.find(m => m.type === "TURN_COMPLETE");
   assert.ok(report, "el content script real debe enviar TURN_COMPLETE");
@@ -165,8 +166,9 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
 
   // B: error DOM controlado del content script, con identidad completa y transición ERROR.
   const bad = await harness("error");
-  await flush();
   const failedContent = await bad.getContent(11);
+  failedContent.listener(bad.starts.find(item => item.message.type === "START_TURN").message, {}, () => {});
+  await flush(100);
   const failed = failedContent.messages.find(m => m.type === "TURN_COMPLETE");
   assert.ok(failed);
   assert.equal(failed.sessionId, bad.sessionId);
