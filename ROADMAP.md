@@ -122,3 +122,17 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 **Estado:** `PARTIAL / DESIGN_ONLY`; no producción.  
 **Siguiente tarea única:** pruebas deterministas de intercalado STOP/dispatchTurn/finishTurn.  
 **TIMER:** auditoría/documentación estimada 2–4 h, confianza media; implementación posterior 2–6 h si se autoriza, confianza baja; estabilización BRIDGE 3–7 días, confianza baja.
+
+
+## BRIDGE-006 — STOP/dispatchTurn/finishTurn (en verificación)
+
+- [x] Añadir barreras deterministas al arnés Node `vm` para `tabs.get()` y persistencia.
+- [x] Añadir regresión A: STOP durante validación de pestaña y excepción tardía.
+- [x] Añadir regresión B: STOP durante persistencia de `finishTurn()`, sin avanzar iteration/lastForwarded ni despachar.
+- [x] Añadir regresión C: STOP + START nuevo antes de liberar la ejecución antigua, cubriendo ABA y respuesta antigua.
+- [x] Añadir identidad de ejecución en memoria, invalidación de STOP y guardas después de awaits; no hay protocolo CANCEL ni cambios a content script.
+- [ ] Verificar en GitHub Actions la suite completa en el SHA final exacto.
+- [ ] Validar manualmente Chrome/Brave si se dispone de navegador; separar suspensión natural MV3 de la simulación Node.
+- [ ] No marcar BRIDGE como producción lista ni declarar cancelación del polling validada.
+- **Estado provisional:** `PARTIAL`, hasta CI exacta. Tiempo medido no disponible; 30–90 min estimados para CI/reconciliación; estabilización BRIDGE 3–7 días, confianza baja.
+- **Siguiente tarea única:** revisar CI del SHA final exacto y reparar solo fallos demostrados.
