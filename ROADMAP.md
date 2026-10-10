@@ -136,3 +136,7 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - [ ] No marcar BRIDGE como producción lista ni declarar cancelación del polling validada.
 - **Estado provisional:** `PARTIAL`, hasta CI exacta. Tiempo medido no disponible; 30–90 min estimados para CI/reconciliación; estabilización BRIDGE 3–7 días, confianza baja.
 - **Siguiente tarea única:** revisar CI del SHA final exacto y reparar solo fallos demostrados.
+
+
+- **Checkpoint CI intermedio:** run [38049197793](https://github.com/jonhararagi/botarquitecto/actions/runs/38049197793) falló en `bridge/tests/validation.test.mjs` porque un contrato estático esperaba la llamada antigua a `failSession()` sin token. La sintaxis pasó; las suites dinámicas no se ejecutaron en ese run. Se ajustó el contrato para exigir el token de ejecución. Esto fue un desajuste de la prueba estática tras el cambio de firma, no evidencia de que las pruebas A/B/C fallaran.
+- **Corrección del contrato:** commit `69a29da8b2837f3b495ded81b4cf9941ef05bd98`. CI posterior para el SHA final aún pendiente de consulta; no marcar PASS hasta verificarlo.
