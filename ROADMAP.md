@@ -5,8 +5,8 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 ## P0 — Control del proyecto y reproducibilidad
 - [x] Definir protocolo CEREBRO/OBRERO y reglas de evidencia.
 - [x] Registrar línea base inicial, riesgos y próxima tarea.
-- [x] Crear validaciones automatizadas reproducibles y documentar cómo ejecutarlas (suite inicial de contratos estáticos; CI PASS_REAL en run 38025305570).
-- [x] Añadir CI para validaciones estáticas y pruebas de contrato (`.github/workflows/bridge-validation.yml`; CI PASS_REAL en run 38025305570).
+- [x] Crear validaciones automatizadas reproducibles y documentar cómo ejecutarlas (suite inicial de contratos estáticos; CI PASS_REAL en run 38025331572).
+- [x] Añadir CI para validaciones estáticas y pruebas de contrato (`.github/workflows/bridge-validation.yml`; CI PASS_REAL en run 38025331572).
 - [ ] Establecer política de versiones y registro de cambios.
 
 ## P1 — Integridad del bucle
