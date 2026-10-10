@@ -65,3 +65,18 @@ La prioridad es ganar fiabilidad antes de sumar funciones. Ningún hito se consi
 - P4 seguridad/licencias: 1–2 días de revisión más correcciones.
 - P5 distribución: 0.5–2 días.
 Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validación manual de navegador se registra aparte.
+
+
+## BRIDGE-003 — política de recuperación y expiración (en curso)
+
+- [x] Definir en código una recuperación conservadora que no reenvía turnos ambiguos al hidratar el worker.
+- [x] Conservar una sesión pausada sin job pendiente, las sesiones inactivas y el historial válido; reparar el selector activo inválido.
+- [x] Añadir pruebas automatizadas para reinicialización simulada, respuesta antigua, timeout informado al worker, duplicado del mismo job y estado persistido incompleto.
+- [x] Añadir a CI una prueba del archivo real `content.js` con reloj simulado para que el timeout no dependa de esperas de pared.
+- [ ] Verificar la CI posterior a estos cambios sobre el SHA final exacto.
+- [ ] Demostrar todos los casos de timeout/respuesta tardía y la semántica STOP/PAUSE bajo pruebas deterministas completas.
+- [ ] Validar suspensión natural, recarga y reinicio del service worker en Chrome o Brave real.
+- [ ] Decidir si se necesita cancelación explícita del polling/generación del content script al recibir STOP; hoy el worker invalida la respuesta, pero no aborta directamente el polling ya iniciado.
+- [ ] No declarar terminada la resiliencia Manifest V3 hasta completar la validación real de navegador y los casos pendientes.
+
+**Evidencia actual:** `PASS_STATIC` revisión del código y workflow en la rama; `NOT_RUN` ejecución local, CI del nuevo SHA y navegador real. Los checks marcados como implementados describen archivos y cobertura añadida, no resultados de ejecución.
