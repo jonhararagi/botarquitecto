@@ -16,3 +16,16 @@
 ## Formato de próximas entradas
 
 Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, commits, comandos ejecutados, evidencia etiquetada, limitaciones, TIMER y una sola siguiente tarea.
+
+## 2026-10-10 — BRIDGE-001 initial validation foundation
+
+- **HEAD BEFORE:** `525cf1a5b666a95f1389a26a3f8d3282b17f10fc` (main snapshot used to create branch).
+- **Branch:** `worker/bridge-001-validation`.
+- **Cambios:** `bridge/tests/validation.test.mjs`, `.github/workflows/bridge-validation.yml`, corrección de `createSessionObject()` inexistente a `createSessionModel()` en `bridge/service-worker.js`; estado y roadmap actualizados.
+- **Objetivo:** establecer validación reproducible sin dependencias externas y detectar regresiones contractuales clave.
+- **Evidencia:** `PASS_STATIC` inspección de fuentes y manifiesto; `NOT_RUN` ejecución de Node/CI/navegador al redactar esta entrada. No declarar CI aprobado hasta revisar el resultado real.
+- **Limitaciones:** los tests actuales comprueban contratos mediante inspección de código; no ejecutan todavía el bucle de sesiones con mocks ni verifican concurrencia en un navegador real.
+- **Licencias/activos:** no se incorporaron materiales externos ni dependencias.
+- **TIMER restante:** 20–45 min revisar CI/diff; 30–60 min validación manual de navegador si disponible.
+- **Siguiente tarea única:** BRIDGE-001-VERIFY: revisar el workflow, corregir fallos y reportar evidencia real.
+
