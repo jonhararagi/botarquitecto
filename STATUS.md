@@ -88,3 +88,16 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **CI:** `PASS_REAL`, GitHub Actions [run 38036355246](https://github.com/jonhararagi/botarquitecto/actions/runs/38036355246), conclusión `success` sobre ese SHA exacto. Pasaron sintaxis, contratos estáticos, pruebas dinámicas del service worker y test de timeout del content script con reloj simulado.
 - **No cubre:** navegador real, suspensión natural MV3 ni STOP durante un turno real. Esos escenarios siguen `NOT_RUN`.
 - Este resultado corresponde al SHA indicado; la siguiente actualización documental, si la hubiera, requiere comprobar CI de nuevo sobre su propio HEAD.
+
+
+## BRIDGE-005 — auditoría STOP/cancelación cooperativa (diseño, no implementación)
+
+- **HEAD de entrada:** `565beccaee678f2e3a75cc386250b9aa58c4043a`; **MAIN:** `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR #6 abierto y sin merge al iniciar la tarea.
+- **Diseño:** `docs/qa/BRIDGE-005-STOP-CANCELLATION-DESIGN.md`.
+- **Hallazgos estáticos:** STOP invalida `activeJobId` en el worker, pero no manda cancelación a `content.js`; el polling continúa hasta resultado o deadline. Se identificó un riesgo de intercalado: `dispatchTurn()` espera `ensureTabAlive()` y luego puede escribir estado sin revalidar STOP; `finishTurn()` también hace trabajo asíncrono tras la comprobación inicial del job. Hace falta prueba determinista, no se afirma que ya haya ocurrido en Chromium.
+- **Diseño propuesto, no implementado:** cancelación idempotente por `sessionId + jobId + tabId + role`; revalidación tras awaits y antes de efectos/resultados; errores de mensajería significan cancelación no confirmada; respuesta tardía descartada; recuperación MV3 sin replay automático.
+- **Cambios de producción/permisos/dependencias:** ninguno. No se modificaron las semánticas de PAUSE/RESUME/STOP.
+- **Evidencia:** `PASS_STATIC` inspección remota; `PASS_REAL` solo para CI histórica en SHA de entrada (run 38036415703, success reportado previamente); `NOT_RUN` para tests nuevos, Chromium real y suspensión natural MV3. Se debe consultar CI para el SHA final documental.
+- **Estado:** `PARTIAL / DESIGN_ONLY`, no producción.
+- **Siguiente tarea única:** añadir pruebas deterministas de intercalado STOP/dispatchTurn/finishTurn, sin cambiar producción.
+- **TIMER:** auditoría/documentación 2–4 h estimadas, confianza media; implementación posterior 2–6 h estimadas si se autoriza, confianza baja; estabilización BRIDGE 3–7 días, confianza baja. Tiempo medido no disponible.
