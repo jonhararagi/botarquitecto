@@ -153,3 +153,11 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - [ ] Verificar todas las comprobaciones en GitHub Actions sobre el SHA final exacto.
 - [ ] Ejecutar protocolo manual en Chrome/Brave real; Node VM no demuestra el ciclo de vida natural MV3.
 - [ ] Mantener BRIDGE como `PARTIAL / NOT_READY` hasta disponer de validación de navegador.
+
+
+### BRIDGE-007 — checkpoint de código
+
+- [x] CI automatizada pasó en el SHA de código `039e00987e3e3323e3af0a1fe9002f6790bf2e8a`: [run 38050951438](https://github.com/jonhararagi/botarquitecto/actions/runs/38050951438).
+- [x] Corregidas las regresiones de prueba detectadas por las dos primeras ejecuciones.
+- [ ] Verificar CI sobre el HEAD final posterior a la documentación.
+- [ ] Validar el ciclo de vida MV3 en Chrome/Brave real. No declarar producción lista antes de esa comprobación.
