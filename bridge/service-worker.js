@@ -14,6 +14,11 @@ function createSessionModel(name = "Sesión 1") {
 const DEFAULT_STATE = { version: 5, activeSessionId: null, sessions: [] };
 let state = structuredClone(DEFAULT_STATE);
 let hydrated = false;
+let executionSequence = 0;
+const executionTokens = new WeakMap();
+function beginExecution(s) { const token = { id: ++executionSequence }; executionTokens.set(s, token); return token; }
+function invalidateExecution(s) { executionTokens.set(s, { id: ++executionSequence }); }
+function isCurrentExecution(s, token) { return Boolean(token) && executionTokens.get(s) === token && s.running && !s.stopRequested; }
 
 async function hydrate() {
   if (hydrated) return;
@@ -84,46 +89,57 @@ async function ensureTabAlive(tabId, role) {
   if (!isChatGPTTab(tab)) throw new Error(role + " ya no es una pestaña ChatGPT");
 }
 
-async function dispatchTurn(s, role, text) {
-  if (!s.running || s.stopRequested || s.paused) return;
+async function dispatchTurn(s, role, text, token = executionTokens.get(s)) {
+  if (!isCurrentExecution(s, token) || s.paused) return;
   const tabId = role === "CEREBRO" ? s.brainTabId : s.workerTabId;
   const timeoutMs = role === "CEREBRO" ? s.brainTimeoutMs : s.workerTimeoutMs;
   const jobId = crypto.randomUUID();
   await ensureTabAlive(tabId, role);
+  if (!isCurrentExecution(s, token) || s.paused) return;
   s.activeRole = role; s.activeJobId = jobId; s.status = "RUNNING — " + s.name + " — " + role;
-  await saveState(); await addLog(s, "BRIDGE", "Enviando a " + role + "...");
+  await saveState();
+  if (!isCurrentExecution(s, token) || s.activeJobId !== jobId || s.paused) return;
+  await addLog(s, "BRIDGE", "Enviando a " + role + "...");
+  if (!isCurrentExecution(s, token) || s.activeJobId !== jobId || s.paused) return;
   try {
     const response = await chrome.tabs.sendMessage(tabId, { type: "START_TURN", jobId, text, timeoutMs, minTurnDelayMs: s.minTurnDelayMs, role, sessionId: s.id });
+    if (!isCurrentExecution(s, token) || s.activeJobId !== jobId) return;
     if (!response?.ok) throw new Error(response?.error || role + " no pudo iniciar el turno");
   } catch (error) {
+    if (!isCurrentExecution(s, token) || s.activeJobId !== jobId) return;
     throw new Error(role + " no responde. Recarga esa pestaña ChatGPT para cargar BRIDGE. " + (error?.message || ""));
   }
 }
 
-async function failSession(s, message) {
+async function failSession(s, message, token = executionTokens.get(s)) {
+  if (token && executionTokens.get(s) !== token) return;
   s.running = false; s.activeRole = null; s.activeJobId = null; s.status = "ERROR — " + message;
-  await addLog(s, "BRIDGE", "ERROR — " + message); await saveState();
+  await addLog(s, "BRIDGE", "ERROR — " + message);
+  if (token && executionTokens.get(s) !== token) return;
+  await saveState();
 }
 
 async function finishTurn(s, jobId, ok, role, text, error) {
-  if (!s.running || s.stopRequested || jobId !== s.activeJobId) return;
+  const token = executionTokens.get(s);
+  if (!isCurrentExecution(s, token) || jobId !== s.activeJobId) return;
   s.activeJobId = null; s.activeRole = null;
-  if (!ok) return failSession(s, role + " — " + (error || "error desconocido"));
+  if (!ok) return failSession(s, role + " — " + (error || "error desconocido"), token);
   const result = String(text || "").trim();
-  if (!result) return failSession(s, role + " devolvió una respuesta vacía");
+  if (!result) return failSession(s, role + " devolvió una respuesta vacía", token);
   await addLog(s, role, result);
+  if (!isCurrentExecution(s, token)) return;
   if (result === "TRABAJO TERMINADO") { s.running = false; s.status = "FINISHED — TRABAJO TERMINADO"; return saveState(); }
-  if (result === s.lastForwarded) return failSession(s, "Respuesta duplicada detectada");
-
+  if (result === s.lastForwarded) return failSession(s, "Respuesta duplicada detectada", token);
   const nextRole = role === "CEREBRO" ? "OBRERO" : "CEREBRO";
   s.lastForwarded = result; s.iteration++;
   if (s.iteration >= s.maxIterations) { s.running = false; s.status = "LIMIT_REACHED — " + s.iteration + " iteraciones"; return saveState(); }
   if (s.paused) { s.status = "PAUSED — siguiente: " + nextRole; return saveState(); }
-
   s.status = "AUTO_FORWARD — " + role + " → " + nextRole;
   await addLog(s, "BRIDGE", "Respuesta verificada. Enviando automáticamente a " + nextRole + ".");
+  if (!isCurrentExecution(s, token)) return;
   await saveState();
-  try { await dispatchTurn(s, nextRole, result); } catch (e) { await failSession(s, e.message || String(e)); }
+  if (!isCurrentExecution(s, token)) return;
+  try { await dispatchTurn(s, nextRole, result, token); } catch (e) { await failSession(s, e.message || String(e), token); }
 }
 
 async function createSession(name) {
@@ -210,8 +226,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       s.workerTimeoutMs = Math.max(5000, Math.min(1800000, Number(message.workerTimeoutMs) || 600000));
       s.minTurnDelayMs = Math.max(0, Math.min(60000, Number(message.minTurnDelayMs) || 0));
       s.running = true; s.paused = false; s.stopRequested = false; s.iteration = 0; s.lastForwarded = ""; s.activeRole = null; s.activeJobId = null; s.log = []; s.status = "STARTING";
-      state.activeSessionId = s.id; await saveState(); await addLog(s, "USUARIO", seed);
-      try { await dispatchTurn(s, "CEREBRO", seed); } catch (e) { await failSession(s, e.message || String(e)); }
+      const executionToken = beginExecution(s);
+      state.activeSessionId = s.id; await saveState();
+      if (!isCurrentExecution(s, executionToken)) { sendResponse({ ok: true, state: snapshot() }); return; }
+      await addLog(s, "USUARIO", seed);
+      if (!isCurrentExecution(s, executionToken)) { sendResponse({ ok: true, state: snapshot() }); return; }
+      try { await dispatchTurn(s, "CEREBRO", seed, executionToken); } catch (e) { await failSession(s, e.message || String(e), executionToken); }
       sendResponse({ ok: true, state: snapshot() }); return;
     }
     if (["PAUSE","RESUME","STOP"].includes(message?.type)) {
@@ -222,10 +242,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (s.running && !s.activeJobId) {
           const last = s.log.filter(x => x.role === "CEREBRO" || x.role === "OBRERO").at(-1);
           if (!last) throw new Error("No hay un turno pendiente para continuar");
-          await dispatchTurn(s, last.role === "CEREBRO" ? "OBRERO" : "CEREBRO", last.text);
+          await dispatchTurn(s, last.role === "CEREBRO" ? "OBRERO" : "CEREBRO", last.text, executionTokens.get(s));
         } else if (s.running) s.status = "RUNNING — esperando a " + s.activeRole;
       }
-      if (message.type === "STOP") { s.stopRequested = true; s.running = false; s.paused = false; s.activeJobId = null; s.activeRole = null; s.status = "STOPPED"; }
+      if (message.type === "STOP") { invalidateExecution(s); s.stopRequested = true; s.running = false; s.paused = false; s.activeJobId = null; s.activeRole = null; s.status = "STOPPED"; }
       await saveState(); sendResponse({ ok: true, state: snapshot() }); return;
     }
     if (message?.type === "RESET_SESSION") {
