@@ -197,3 +197,14 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 
 
 - BRIDGE-008 checkpoint: run [38055735149](https://github.com/jonhararagi/botarquitecto/actions/runs/38055735149) volvió a pasar sintaxis, contratos estáticos, suite dinámica y timeout. La integración aún no observó `TURN_COMPLETE`: el reloj se drenaba antes de que la cadena asíncrona inicial programara sus primeros timers. Se añade un vaciado de microtareas antes de avanzar el reloj, conservando timers simulados y sin usar sleeps reales. CI final pendiente.
+
+### BRIDGE-008 — finalización integrada
+
+- **HEAD de entrada declarado:** `532aaadbcc876f7496295b74e56a88100ea8f91d`. La inspección confirmó que el código ya propagaba `sessionId`, `jobId` y `role` desde `START_TURN` a `TURN_COMPLETE` en las rutas de éxito y error; el worker ya verificaba sesión, job activo, rol y pestaña asignada.
+- **Cambio BRIDGE-008:** se reforzó el test integrado del content script y service worker reales en Node `vm`: se rechaza una finalización enviada desde la pestaña del rol opuesto aunque declare el rol correcto, y el caso de error verifica que el `jobId` original no esté vacío.
+- **Respuesta de entrega:** el content script solo considera confirmada la entrega con `ok:true` y `accepted:true`; si el worker rechaza o la promesa falla, registra un error de entrega sin reintentos y sin convertirlo en un resultado de ChatGPT.
+- **Pruebas:** integración en CI falló inicialmente porque el reloj simulado se drenaba antes de que el polling programara sus timers. Se cambió la prueba para avanzar el reloj por ticks deterministas y permitir que cada continuación asíncrona programe el siguiente polling. Resultado final pendiente de CI sobre el SHA exacto.
+- **Comandos locales:** no ejecutados localmente mediante GitHub; solo se considerará evidencia de regresión la ejecución remota del workflow.
+- **Limitaciones:** Chrome/Brave real, suspensión natural MV3 y cancelación cooperativa continúan `NOT RUN`.
+- **TIMER:** tiempo medido no disponible. Trabajo estimado 2–5 h, validación manual 1–2 h adicionales; estabilización BRIDGE restante 3–7 días de trabajo concentrado, confianza baja.
+
