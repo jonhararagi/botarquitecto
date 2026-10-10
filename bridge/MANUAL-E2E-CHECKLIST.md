@@ -17,7 +17,17 @@ Este checklist cubre la prueba que la suite de Node no puede demostrar: el compo
 - [ ] Abrir dos conversaciones ChatGPT distintas en el mismo perfil: una para CEREBRO y otra para OBRERO.
 - [ ] Abrir el panel de BRIDGE, actualizar la lista de pestañas y asignar dos pestañas distintas.
 - [ ] Configurar un límite bajo de iteraciones (por ejemplo, 4) y tiempos de espera adecuados para la prueba.
-- [ ] Guardar el SHA exacto probado y la versión del navegador.
+- [ ] Registrar el SHA exacto probado y la versión del navegador antes de ejecutar los casos.
+
+## Datos de la ejecución
+
+| Campo | Valor |
+| --- | --- |
+| Fecha y hora (incluye zona horaria) | Pendiente |
+| SHA de la rama probada | Pendiente |
+| Navegador y versión | Pendiente |
+| Sistema operativo | Pendiente |
+| Perfil de prueba aislado | Pendiente |
 
 ## Casos de aceptación
 
@@ -34,27 +44,32 @@ Este checklist cubre la prueba que la suite de Node no puede demostrar: el compo
 | E2E-09 | Pestaña cerrada o recargada | Durante una sesión de prueba, cerrar o recargar una de las pestañas asignadas. | La sesión falla de forma explícita; no queda eternamente RUNNING ni se reenvía contenido incierto. |
 | E2E-10 | Límite de iteraciones | Iniciar con un máximo pequeño de iteraciones. | La sesión se detiene al alcanzar el límite configurado. |
 
-## Evidencia por ejecución
+## Registro de evidencia por caso
 
-Completar una fila por caso; no marcar PASS basándose únicamente en una inspección del código.
+Completar una fila por cada ejecución. No marcar PASS basándose únicamente en una inspección del código o en el estado RUNNING. Si se repite un caso, añadir otra fila con la fecha y el SHA probados.
 
-| Campo | Valor |
-| --- | --- |
-| Fecha y hora | Pendiente |
-| SHA de la rama probada | Pendiente |
-| Navegador y versión | Pendiente |
-| Sistema operativo | Pendiente |
-| ID del caso | Pendiente |
-| Resultado | NOT RUN / PASS / FAIL / BLOCKED |
-| Pasos observados | Pendiente |
-| Captura o registro redactado | Pendiente |
-| Incidencia enlazada | Pendiente |
+| ID | Resultado | Pasos observados / resultado real | Captura o registro redactado | Incidencia / notas |
+| --- | --- | --- | --- | --- |
+| E2E-01 | NOT RUN | Pendiente | Pendiente | |
+| E2E-02 | NOT RUN | Pendiente | Pendiente | |
+| E2E-03 | NOT RUN | Pendiente | Pendiente | |
+| E2E-04 | NOT RUN | Pendiente | Pendiente | |
+| E2E-05 | NOT RUN | Pendiente | Pendiente | |
+| E2E-06 | NOT RUN | Pendiente | Pendiente | |
+| E2E-07 | NOT RUN | Pendiente | Pendiente | |
+| E2E-08 | NOT RUN | Pendiente | Pendiente | |
+| E2E-09 | NOT RUN | Pendiente | Pendiente | |
+| E2E-10 | NOT RUN | Pendiente | Pendiente | |
 
-## Criterio de salida
+Valores permitidos para Resultado:
 
-- **PASS:** todos los casos obligatorios se ejecutaron y se observó el resultado esperado.
+- **PASS:** se ejecutó el caso y se observó el resultado esperado; adjuntar evidencia.
 - **FAIL:** el comportamiento observado contradice el resultado esperado; registrar pasos reproducibles y detener la integración.
 - **BLOCKED:** no se pudo ejecutar por limitaciones del navegador, red, cuenta o entorno; no equivale a PASS.
 - **NOT RUN:** aún no existe evidencia de ejecución.
 
-La CI verde valida las regresiones automatizadas, pero no sustituye esta prueba manual. Mantener el PR en borrador hasta que al menos E2E-01, E2E-03, E2E-05 y E2E-07 tengan evidencia PASS; completar los demás casos antes de declarar la validación E2E completa.
+## Criterio de salida
+
+- Mantener el PR en borrador hasta que E2E-01, E2E-03, E2E-05 y E2E-07 tengan evidencia PASS.
+- Completar los diez casos antes de declarar la validación E2E completa.
+- La CI verde valida las regresiones automatizadas, pero no sustituye esta prueba manual.
