@@ -70,14 +70,38 @@ async function hydrate() {
   hydrated = true;
   await saveState();
 }
-let saveRevision = 0;
-async function saveState() {
-  const revision = ++saveRevision;
-  const payload = structuredClone(state);
-  await chrome.storage.local.set({ [STORAGE_KEY]: payload });
-  // If an older write completed after a newer state mutation/write, repair storage
-  // from the current in-memory authority rather than leaving a stale snapshot last.
-  if (revision !== saveRevision) await saveState();
+// Serialize storage writes and coalesce requests that arrive during an active write.
+// Each caller belongs to one batch and settles only when that batch's snapshot is written.
+// A rejected batch rejects its callers; the drain continues for later requests without
+// retrying the failed snapshot recursively. No queue state is persisted across MV3 restarts.
+let saveQueueRunning = false;
+let pendingSaveWaiters = [];
+function saveState() {
+  return new Promise((resolve, reject) => {
+    pendingSaveWaiters.push({ resolve, reject });
+    if (!saveQueueRunning) void drainSaveQueue();
+  });
+}
+async function drainSaveQueue() {
+  if (saveQueueRunning) return;
+  saveQueueRunning = true;
+  try {
+    while (pendingSaveWaiters.length) {
+      const batch = pendingSaveWaiters;
+      pendingSaveWaiters = [];
+      const payload = structuredClone(state);
+      try {
+        await chrome.storage.local.set({ [STORAGE_KEY]: payload });
+        for (const waiter of batch) waiter.resolve();
+      } catch (error) {
+        for (const waiter of batch) waiter.reject(error);
+      }
+    }
+  } finally {
+    saveQueueRunning = false;
+    // Defensive handoff: requests are normally consumed by the loop above.
+    if (pendingSaveWaiters.length) void drainSaveQueue();
+  }
 }
 function getSession(id) { return state.sessions.find(s => s.id === id) || null; }
 function snapshot() { return { version: state.version, activeSessionId: state.activeSessionId, sessions: state.sessions.map(s => ({ ...s, log: [...s.log] })) }; }
