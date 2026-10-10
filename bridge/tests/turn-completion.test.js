@@ -212,6 +212,44 @@ test("content script starts a job once and ignores duplicate START_TURN delivery
   assert.equal(inputQueries, queriesAfterFirst, "a completed job id must not be submitted again");
 });
 
+test("content script rejects START_TURN without a jobId without occupying the tab", async () => {
+  const source = fs.readFileSync(path.join(root, "content.js"), "utf8");
+  let onMessage;
+  let inputQueries = 0;
+  const chrome = {
+    runtime: {
+      onMessage: { addListener(fn) { onMessage = fn; } },
+      sendMessage() { return Promise.resolve({ ok: true }); }
+    }
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === "#prompt-textarea") inputQueries++;
+      return [];
+    }
+  };
+  vm.runInNewContext(source, {
+    chrome, document,
+    getComputedStyle: () => ({ display: "block", visibility: "visible" }),
+    setTimeout, clearTimeout, console, Date, Math, String, Number, Boolean,
+    Array, Object, Promise, Error,
+    InputEvent: class InputEvent {}, Event: class Event {},
+    HTMLInputElement: class HTMLInputElement {},
+    HTMLTextAreaElement: class HTMLTextAreaElement {}
+  }, { filename: "content.js" });
+
+  const dispatch = (message) => new Promise(resolve => onMessage(message, {}, resolve));
+  const invalid = await dispatch({ type: "START_TURN", text: "must not run" });
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.error, /jobId válido/);
+  assert.equal(inputQueries, 0, "an invalid job must not inspect or submit the composer");
+
+  const valid = await dispatch({ type: "START_TURN", jobId: "job-after-invalid", text: "valid job" });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.started, true, "invalid delivery must not leave the tab occupied");
+  assert.ok(inputQueries > 0);
+});
+
 test("content script includes session identity and checks the completion acknowledgement", () => {
   const source = fs.readFileSync(path.join(root, "content.js"), "utf8");
   assert.match(source, /sessionId:\s*String\(message\.sessionId\s*\|\|\s*""\)/);
