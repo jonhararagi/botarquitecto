@@ -53,6 +53,13 @@ async function harness(mode = "success", options = {}) {
     const useKeyboardFallback = options.keyboardFallback === true && tabId === 11;
     const ambiguousClick = options.ambiguousClick === true && tabId === 11;
     const unrecognizedStopActive = options.unrecognizedStopActive === true && tabId === 11;
+    const transientStop = options.transientStop === true && tabId === 11;
+    const mutationObservers = [];
+    class MockMutationObserver {
+      constructor(callback) { this.callback = callback; this.active = false; mutationObservers.push(this); }
+      observe(target) { this.target = target; this.active = true; }
+      disconnect() { this.active = false; }
+    }
     const sendAttempts = { click: 0, keyboard: 0 };
     let stopVisible = false;
     let stopVisibilityChecks = 0;
@@ -99,10 +106,26 @@ async function harness(mode = "success", options = {}) {
       getAttribute(name) { return name === "data-testid" ? "stop-generating" : null; },
       innerText: "", textContent: ""
     };
+    function clickSend() {
+      sendAttempts.click++;
+      if (mode === "error") throw new Error("DOM integrado controlado");
+      if (ambiguousClick) return;
+      stopVisible = true;
+      if (transientStop) {
+        stopMarker.transientWasVisible = true;
+        for (const observer of mutationObservers) {
+          if (observer.active && observer.target === document.documentElement) {
+            queueMicrotask(() => observer.callback([{ type: "childList", addedNodes: [stopMarker], target: document.documentElement }]));
+          }
+        }
+        stopVisible = false;
+      }
+      if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; }
+    }
     const sendButton = {
       disabled: true,
       getAttribute(name) { return name === "data-testid" ? "send-button" : null; },
-      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; stopVisible = true; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click: clickSend
     };
     localizedSendButton = {
       disabled: true,
@@ -111,16 +134,17 @@ async function harness(mode = "success", options = {}) {
         if (name === "type") return "submit";
         return null;
       },
-      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; stopVisible = true; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click: clickSend
     };
     structuralSendButton = {
       disabled: true,
       // Simulates an icon-only send control with no accessible label, test-id,
       // submit type, or wrapping form.
       getAttribute() { return null; },
-      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; stopVisible = true; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click: clickSend
     };
     const document = {
+      documentElement: {},
       querySelectorAll(selector) {
         if (selector === "#prompt-textarea" || selector === 'textarea[name="prompt-textarea"]' ||
             selector === 'div[contenteditable="true"][role="textbox"]') return [input];
@@ -143,7 +167,7 @@ async function harness(mode = "success", options = {}) {
     let fakeNow = 0;
     class FastDate extends Date { static now() { fakeNow += 500; return fakeNow; } }
     const context = vm.createContext({
-      chrome, document, Date: FastDate,
+      chrome, document, Date: FastDate, MutationObserver: MockMutationObserver,
       setTimeout: callback => { queueMicrotask(callback); return 1; }, clearTimeout: () => {},
       Promise, console, queueMicrotask,
       InputEvent: class { constructor(type) { this.type = type; } }, Event: class { constructor(type) { this.type = type; } }, KeyboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
@@ -151,7 +175,7 @@ async function harness(mode = "success", options = {}) {
       getComputedStyle: node => {
         if (node === stopMarker) {
           stopVisibilityChecks++;
-          const visible = unrecognizedStopActive || (stopVisible && stopVisibilityChecks <= 1);
+          const visible = (transientStop && node.transientWasVisible) || unrecognizedStopActive || (stopVisible && stopVisibilityChecks <= 1);
           return { display: visible ? "block" : "none", visibility: "visible" };
         }
         return { display: "block", visibility: "visible" };
@@ -313,6 +337,23 @@ test("CEREBRO→OBRERO completes when OBRERO exposes only an icon-only composer 
   assert.ok(completed.log.some(entry => entry.role === "OBRERO" && entry.text === "respuesta OBRERO integrada"));
 });
 
+
+test("a transient Stop signal is retained when the response completes before the first polling sample", async () => {
+  const h = await harness("success", { maxIterations: 1, transientStop: true });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(300);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report, "a completed fast response must reach the worker");
+  assert.equal(report.ok, true, "briefly visible generation must be observed even if polling misses it");
+  assert.equal(report.text, "respuesta integrada");
+  const session = (await h.state()).sessions[0];
+  assert.equal(session.iteration, 1);
+  assert.match(session.status, /^LIMIT_REACHED/);
+});
 
 test("an ambiguous post-click state never triggers a second automatic send", async () => {
   const h = await harness("success", { maxIterations: 1, ambiguousClick: true });
