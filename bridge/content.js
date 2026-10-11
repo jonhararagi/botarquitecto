@@ -433,7 +433,11 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
 async function waitForComposerSubmission(input, beforeNode, beforeText, expectedText, generationObservation, timeoutMs = 1800) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const composerText = normalizeComposerText(readComposerText(input));
+    // ChatGPT may replace its contenteditable during a React render. Inspect
+    // the live composer first; the original node can retain stale text after
+    // being detached and must not suppress a valid submission signal.
+    const activeInput = getInput();
+    const composerText = normalizeComposerText(readComposerText(activeInput || input));
     const latestNode = getLatestAssistantNode();
     const latestText = getAssistantText(latestNode);
     const responseChanged = Boolean(latestNode && latestText &&
