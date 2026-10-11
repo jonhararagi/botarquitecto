@@ -525,6 +525,8 @@ test("send failure emits bounded, content-free BRIDGE_SEND_DIAG evidence", async
   const payload = JSON.parse(record[1]);
   assert.equal(payload.outcome, "error", "terminal send failure must be labeled as an error");
   assert.equal(payload.errorCode, "submission_unconfirmed");
+  assert.equal(payload.clickAttempted, true, "the summary must distinguish a click attempt from confirmed submission");
+  assert.equal(payload.clickCallReturned, true, "returning from click() is not itself proof of delivery");
   assert.ok(payload.events.some(event => event.stage === "terminal_error"));
 });
 
