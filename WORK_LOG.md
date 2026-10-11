@@ -316,3 +316,14 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - La nueva regresión cubre el ciclo CEREBRO→OBRERO cuando el segundo compositor muestra un botón icon-only sin test-id, etiqueta accesible, tipo submit ni formulario.
 - La suite es DOM simulado bajo Node; queda pendiente repetir el caso en Chrome real. PR #6 sigue abierto y `main` no cambia.
 - **TIMER:** código/CI terminados; quedan 5–10 min de sincronización y 10–20 min de prueba manual, estimados.
+
+## 2026-10-11 — BRIDGE-016 · confirmación post-click y reintento único
+
+- **Código probado:** `9e681c1695933b94b4a41c98f17204319260f909`.
+- **CI final:** [run 38131121319](https://github.com/jonhararagi/botarquitecto/actions/runs/38131121319) concluyó `success` sobre ese SHA exacto. Pasaron sintaxis, contratos estáticos, service worker, timeout, persistencia de Iteraciones e integración content-script/service-worker.
+- Tras pulsar el control del compositor, el script comprueba si el texto sigue en el campo y si hay evidencia de envío. Si el texto sigue intacto y no hay nueva respuesta, intenta una sola vez `form.requestSubmit()` o eventos Enter. Si no puede verificar el envío, reporta un error específico.
+- La regresión integrada cubre el fallback Enter; el test de timeout ahora espera el error explícito de mensaje no enviado.
+- **Incidentes CI documentados:** los runs 38131067716/38131070692 fallaron porque el harness no definía `KeyboardEvent`; el run 38131094418 conservó la misma causa. Se añadió la API al fixture y se actualizó la expectativa del test para el diagnóstico nuevo. El run final pasó.
+- **Límite de evidencia:** CI simula DOM/APIs; no prueba que el evento sintético Enter sea aceptado por la versión real de ChatGPT. Hace falta prueba manual en Chrome.
+- **PR #6:** abierto, sin merge; `main` permanece intacta.
+- **TIMER:** código y CI terminados; sincronización local 5–10 min y prueba manual 10–20 min estimados.
