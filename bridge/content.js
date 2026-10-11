@@ -774,7 +774,9 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, jobId = 
       composer: describeComposer(getInput() || input, text, originalInput)
     });
     diagnosticOutcome = "waiting_for_response";
-    return await waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs);
+    const responseText = await waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs);
+    diagnosticOutcome = "completed";
+    return responseText;
   } catch (error) {
     diagnosticErrorCode = sendFailureCode(error);
     recordSendDiagnostic(diagnostic, "terminal_error", {
