@@ -297,6 +297,12 @@ function stripBridgeMarker(text) {
   return index === -1 ? value : value.slice(0, index).trim();
 }
 
+function hasStopSemantics(node) {
+  const testId = String(node?.getAttribute?.("data-testid") || "").toLowerCase();
+  if (testId === "stop-button" || testId.includes("stop-generating")) return true;
+  return /\\b(stop|detener|cancel generation|cancelar generación|stop generating|detener respuesta)\\b/.test(controlLabel(node));
+}
+
 function findVisibleStopControl() {
   const selected = firstVisible(STOP_SELECTORS);
   if (selected) {
@@ -308,10 +314,58 @@ function findVisibleStopControl() {
   // when the preferred selectors no longer match.
   const fallback = [...document.querySelectorAll("button, [role='button']")].find(node => {
     if (!isVisible(node)) return false;
-    return /\b(stop|detener|cancel generation|cancelar generación|stop generating|detener respuesta)\b/.test(controlLabel(node));
+    return hasStopSemantics(node);
   }) || null;
   if (fallback) generationObserved = true;
   return fallback;
+}
+
+// Polling can miss a brief Stop control when a short answer finishes between
+// samples. Observe DOM additions and relevant attribute changes before clicking
+// Send so that positive generation evidence is retained even after it vanishes.
+function observeGenerationStart() {
+  const root = document.documentElement || document.body;
+  if (typeof MutationObserver !== "function" || !root) return null;
+
+  let observer;
+  observer = new MutationObserver(records => {
+    if (generationObserved) {
+      observer.disconnect();
+      return;
+    }
+
+    for (const record of records) {
+      const candidates = [];
+      if (record.type === "attributes") candidates.push(record.target);
+      for (const added of record.addedNodes || []) {
+        candidates.push(added);
+        if (added?.querySelectorAll) {
+          candidates.push(...added.querySelectorAll("button, [role='button']"));
+        }
+      }
+
+      for (const candidate of candidates) {
+        const isButton = Boolean(
+          candidate?.matches?.("button, [role='button']") ||
+          String(candidate?.tagName || "").toLowerCase() === "button" ||
+          candidate?.getAttribute?.("role") === "button"
+        );
+        if (isButton && isVisible(candidate) && hasStopSemantics(candidate)) {
+          generationObserved = true;
+          observer.disconnect();
+          return;
+        }
+      }
+    }
+  });
+
+  observer.observe(root, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["aria-label", "data-testid", "title", "hidden", "aria-hidden", "style", "class"]
+  });
+  return observer;
 }
 
 async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
@@ -383,20 +437,26 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
   const button = await waitForSendButton(10000, input, text);
   generationObserved = false;
   const sentAt = Date.now();
-  button.click();
+  const generationObserver = observeGenerationStart();
 
-  const submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text);
-  if (!submitted) {
-    throw new Error("ChatGPT no confirmó el envío de forma inequívoca; no se reintentó para evitar duplicar el mensaje");
+  try {
+    button.click();
+
+    const submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text);
+    if (!submitted) {
+      throw new Error("ChatGPT no confirmó el envío de forma inequívoca; no se reintentó para evitar duplicar el mensaje");
+    }
+
+    return await waitForCompletedResponse(
+      beforeNode,
+      beforeText,
+      sentAt,
+      timeoutMs,
+      minTurnDelayMs
+    );
+  } finally {
+    generationObserver?.disconnect();
   }
-
-  return waitForCompletedResponse(
-    beforeNode,
-    beforeText,
-    sentAt,
-    timeoutMs,
-    minTurnDelayMs
-  );
 }
 
 async function runTurn(message) {
