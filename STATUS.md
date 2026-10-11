@@ -257,3 +257,6 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 ### BRIDGE-015 — ajuste de contrato estático
 
 - CI inicial detectó solamente un contrato estático que escapaba en exceso los corchetes del selector de controles. Se cambió a coincidencia literal; la validación completa debe pasar en el siguiente SHA.
+
+
+- Segundo checkpoint: la prueba integrada detectó correctamente que el fixture repetía el texto de CEREBRO y OBRERO, activando la defensa contra respuesta duplicada. Se hace distinta la respuesta de OBRERO para aislar el comportamiento de envío; CI nueva pendiente.

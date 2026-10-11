@@ -75,9 +75,10 @@ async function harness(mode = "success", options = {}) {
       },
       getAttribute() { return null; }
     };
+      const replyText = tabId === 22 ? "respuesta OBRERO integrada" : "respuesta integrada";
       const node = {
-      innerText: "respuesta integrada [[BRIDGE_DONE]]",
-      textContent: "respuesta integrada [[BRIDGE_DONE]]",
+      innerText: replyText + " [[BRIDGE_DONE]]",
+      textContent: replyText + " [[BRIDGE_DONE]]",
       querySelector() { return null; },
       closest() { return null; }, getAttribute() { return "assistant"; }
     };
@@ -280,10 +281,10 @@ test("CEREBRO→OBRERO completes when OBRERO exposes only an icon-only composer 
   assert.ok(workerReport, "OBRERO content script must report a terminal result");
   assert.equal(workerReport.role, "OBRERO");
   assert.equal(workerReport.ok, true);
-  assert.equal(workerReport.text, "respuesta integrada");
+  assert.equal(workerReport.text, "respuesta OBRERO integrada");
 
   const completed = (await h.state()).sessions[0];
   assert.equal(completed.iteration, 2);
   assert.match(completed.status, /^LIMIT_REACHED/);
-  assert.ok(completed.log.some(entry => entry.role === "OBRERO" && entry.text === "respuesta integrada"));
+  assert.ok(completed.log.some(entry => entry.role === "OBRERO" && entry.text === "respuesta OBRERO integrada"));
 });

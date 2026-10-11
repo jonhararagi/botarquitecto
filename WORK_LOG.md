@@ -304,3 +304,6 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 
 - La primera CI del cambio `0779b772e97626ac4b18fb9f3167926b4bdb00dd`, [run 38129433637](https://github.com/jonhararagi/botarquitecto/actions/runs/38129433637), pasó sintaxis pero falló en una aserción estática demasiado escapada para el selector `button, [role='button']`. Los tests dinámicos no se ejecutaron en ese run.
 - Se sustituye esa aserción regex por una comprobación literal. La lógica productiva no cambia en este ajuste de prueba; nueva CI pendiente.
+
+
+- **Segundo checkpoint CI:** [run 38129469661](https://github.com/jonhararagi/botarquitecto/actions/runs/38129469661) pasó sintaxis y los contratos estáticos, pero la integración falló porque el fixture usaba la misma respuesta para CEREBRO y OBRERO. El worker rechazó ese resultado repetido conforme a la protección de duplicados, así que el test no llegó a comprobar el límite 2. Se cambia la respuesta simulada de OBRERO por una distinta y se vuelve a ejecutar CI; no se interpreta este fallo de fixture como defecto productivo del envío.
