@@ -174,6 +174,8 @@ function createSendDiagnostic(jobId, expectedText) {
     jobId: String(jobId || ""),
     startedAt: Date.now(),
     expectedLength: normalizeComposerText(expectedText).length,
+    clickAttempted: false,
+    clickCallReturned: false,
     events: [],
     omittedEvents: 0
   };
@@ -206,6 +208,8 @@ function emitSendDiagnostic(diagnostic, outcome, errorCode = null) {
     jobId: diagnostic.jobId,
     outcome,
     expectedLength: diagnostic.expectedLength,
+    clickAttempted: diagnostic.clickAttempted,
+    clickCallReturned: diagnostic.clickCallReturned,
     events: diagnostic.events,
     omittedEvents: diagnostic.omittedEvents
   };
@@ -757,7 +761,9 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, jobId = 
     });
 
     try {
+      diagnostic.clickAttempted = true;
       button.click();
+      diagnostic.clickCallReturned = true;
     } catch (error) {
       recordSendDiagnostic(diagnostic, "click_threw", {
         button: describeSendButton(button, input, sourceForSendButton(input, button)),
