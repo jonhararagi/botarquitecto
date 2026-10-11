@@ -49,10 +49,16 @@ async function harness(mode = "success") {
   }
   async function getContent(tabId) {
     if (contents.has(tabId)) return contents.get(tabId);
+    let localizedSendButton;
     const input = {
-      value: "", textContent: "", focus() {},
-      matches: selector => selector === "textarea, input",
-      dispatchEvent() {}, getAttribute() { return null; }
+      value: "", textContent: "",
+      get innerText() { return this.textContent; },
+      focus() {},
+      matches: () => false,
+      dispatchEvent(event) {
+        if (event.type === "input" && this.textContent) localizedSendButton.disabled = false;
+      },
+      getAttribute() { return null; }
     };
       const node = {
       innerText: "respuesta integrada [[BRIDGE_DONE]]",
@@ -62,21 +68,30 @@ async function harness(mode = "success") {
     };
     const assistant = [];
     const sendButton = {
-      disabled: false, getAttribute() { return null; },
+      disabled: true,
+      getAttribute(name) { return name === "data-testid" ? "send-button" : null; },
+      click() { if (mode === "error") throw new Error("DOM integrado controlado"); assistant.push(node); }
+    };
+    localizedSendButton = {
+      disabled: true,
+      getAttribute(name) {
+        if (name === "aria-label") return "Enviar mensaje";
+        if (name === "type") return "submit";
+        return null;
+      },
       click() { if (mode === "error") throw new Error("DOM integrado controlado"); assistant.push(node); }
     };
     const document = {
       querySelectorAll(selector) {
         if (selector === "#prompt-textarea" || selector === 'textarea[name="prompt-textarea"]' ||
             selector === 'div[contenteditable="true"][role="textbox"]') return [input];
-        if (selector.includes("send-button") || selector.includes("Send prompt") ||
-            selector.includes("Send message") || selector.includes("composer-submit-btn") ||
-            selector.includes('button[aria-label="Send"]')) return [sendButton];
+        if (selector === 'button[data-testid="send-button"]' || selector === 'button[data-testid*="send" i]') return [sendButton];
+        if (selector === 'button[aria-label*="enviar" i]') return [localizedSendButton];
         if (selector === '[data-message-author-role="assistant"]' || selector === "article") return assistant;
         if (selector.includes("stop-button") || selector.includes("Stop") || selector.includes("Detener")) return [];
         return [];
       },
-      execCommand() { return true; }
+      execCommand() { return false; }
     };
     const runtimeListeners = { message: null };
     const chrome = {
@@ -91,7 +106,7 @@ async function harness(mode = "success") {
       chrome, document, Date: FastDate,
       setTimeout: callback => { queueMicrotask(callback); return 1; }, clearTimeout: () => {},
       Promise, console, queueMicrotask,
-      InputEvent: class { constructor() {} }, Event: class { constructor() {} },
+      InputEvent: class { constructor(type) { this.type = type; } }, Event: class { constructor(type) { this.type = type; } },
       HTMLInputElement: class {}, HTMLTextAreaElement: class {},
       getComputedStyle: () => ({ display: "block", visibility: "visible" })
     });

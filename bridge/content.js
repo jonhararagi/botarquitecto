@@ -9,7 +9,12 @@ const SEND_SELECTORS = [
   "button[aria-label=\"Send prompt\"]",
   "button[aria-label=\"Send message\"]",
   "form[data-chatgpt-composer] button[aria-label=\"Send\"]",
-  "button.composer-submit-btn"
+  "button.composer-submit-btn",
+  "button[data-testid*=\"send\" i]",
+  "button[aria-label*=\"send\" i]",
+  "button[aria-label*=\"enviar\" i]",
+  "button[title*=\"send\" i]",
+  "button[title*=\"enviar\" i]"
 ];
 
 const STOP_SELECTORS = [
@@ -22,15 +27,36 @@ const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
 const RESPONSE_STABLE_MS = 2000;
 let activeJobId = null;
 
+function isVisible(node) {
+  if (!node) return false;
+  const style = getComputedStyle(node);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
 function firstVisible(selectors) {
   for (const selector of selectors) {
     const nodes = document.querySelectorAll(selector);
     for (const node of nodes) {
-      const style = getComputedStyle(node);
-      if (style.display !== "none" && style.visibility !== "hidden") return node;
+      if (isVisible(node)) return node;
     }
   }
   return null;
+}
+
+function isEnabled(node) {
+  return isVisible(node) &&
+    !node.disabled &&
+    node.getAttribute("aria-disabled") !== "true";
+}
+
+function readComposerText(element) {
+  if (!element) return "";
+  if (typeof element.value === "string") return element.value;
+  return String(element.innerText ?? element.textContent ?? "");
+}
+
+function normalizeComposerText(text) {
+  return String(text || "").replace(/\\s+/g, " ").trim();
 }
 
 function getInput() { return firstVisible(INPUT_SELECTORS); }
@@ -71,6 +97,15 @@ function responseTextFromSourceTurn(node, expectedText) {
   return responseText;
 }
 
+function dispatchComposerInput(element, text) {
+  element.dispatchEvent(new InputEvent("input", {
+    bubbles: true,
+    inputType: "insertText",
+    data: text
+  }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 function insertText(element, text) {
   element.focus();
 
@@ -83,19 +118,33 @@ function insertText(element, text) {
     else element.value = text;
   } else {
     element.textContent = "";
+    let inserted = false;
     try {
-      document.execCommand("insertText", false, text);
+      inserted = document.execCommand("insertText", false, text) === true;
     } catch {
+      inserted = false;
+    }
+
+    // execCommand may return false without throwing, leaving a blank composer.
+    // Fall back to setting the editable node, then fire input/change for React.
+    if (!inserted || normalizeComposerText(readComposerText(element)) !== normalizeComposerText(text)) {
       element.textContent = text;
     }
   }
 
-  element.dispatchEvent(new InputEvent("input", {
-    bubbles: true,
-    inputType: "insertText",
-    data: text
-  }));
-  element.dispatchEvent(new Event("change", { bubbles: true }));
+  dispatchComposerInput(element, text);
+
+  // Verify insertion; a failed execCommand must not leave BRIDGE waiting for an
+  // enabled Send button when the text never reached the composer.
+  if (normalizeComposerText(readComposerText(element)) !== normalizeComposerText(text)) {
+    if (element.matches("textarea, input")) element.value = text;
+    else element.textContent = text;
+    dispatchComposerInput(element, text);
+  }
+
+  if (normalizeComposerText(readComposerText(element)) !== normalizeComposerText(text)) {
+    throw new Error("BRIDGE no pudo insertar el mensaje en el cuadro de ChatGPT");
+  }
 }
 
 async function waitForInput(timeoutMs) {
@@ -108,14 +157,65 @@ async function waitForInput(timeoutMs) {
   throw new Error("ChatGPT input not found");
 }
 
-async function waitForSendButton(timeoutMs) {
+function findEnabledSendButton(input) {
+  // Search each selector independently. A disabled match must not mask another
+  // enabled send button exposed under a different accessible label/DOM contract.
+  for (const selector of SEND_SELECTORS) {
+    const nodes = document.querySelectorAll(selector);
+    for (const node of nodes) {
+      if (isEnabled(node)) return node;
+    }
+  }
+
+  // Last resort: inspect the submit control scoped to the form containing the
+  // composer. Never click arbitrary page buttons outside the composer form.
+  const form = input?.closest?.("form");
+  if (form?.querySelectorAll) {
+    const buttons = [...form.querySelectorAll("button")].filter(isEnabled);
+    const labeledSend = buttons.find(button => {
+      const label = [
+        button.getAttribute("data-testid"),
+        button.getAttribute("aria-label"),
+        button.getAttribute("title"),
+        button.innerText,
+        button.textContent
+      ].filter(Boolean).join(" ").toLowerCase();
+      return /send|enviar|submit/.test(label);
+    });
+    if (labeledSend) return labeledSend;
+
+    const submits = [...form.querySelectorAll('button[type="submit"]')].filter(isEnabled);
+    if (submits.length === 1) return submits[0];
+  }
+
+  return null;
+}
+
+async function waitForSendButton(timeoutMs, input, expectedText) {
   const started = Date.now();
+  let sawVisibleCandidate = false;
   while (Date.now() - started < timeoutMs) {
-    const button = firstVisible(SEND_SELECTORS);
-    if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") return button;
+    for (const selector of SEND_SELECTORS) {
+      for (const node of document.querySelectorAll(selector)) {
+        if (isVisible(node)) sawVisibleCandidate = true;
+      }
+    }
+
+    const actualText = normalizeComposerText(readComposerText(input));
+    const expected = normalizeComposerText(expectedText);
+    if (actualText !== expected) {
+      throw new Error("El texto no quedó correctamente insertado en el cuadro de ChatGPT");
+    }
+
+    const button = findEnabledSendButton(input);
+    if (button) return button;
     await new Promise(r => setTimeout(r, 200));
   }
-  throw new Error("ChatGPT send button not found or disabled");
+
+  if (sawVisibleCandidate) {
+    throw new Error("El botón de envío de ChatGPT sigue deshabilitado después de insertar el mensaje");
+  }
+  throw new Error("No se encontró un botón de envío reconocible en el compositor de ChatGPT");
 }
 
 function stripBridgeMarker(text) {
@@ -176,7 +276,7 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
 
   insertText(input, text);
 
-  const button = await waitForSendButton(10000);
+  const button = await waitForSendButton(10000, input, text);
   button.click();
 
   return waitForCompletedResponse(
