@@ -335,6 +335,36 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   );
 }
 
+async function waitForComposerSubmission(input, beforeNode, beforeText, expectedText, timeoutMs = 1800) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const composerText = normalizeComposerText(readComposerText(input));
+    const latestNode = getLatestAssistantNode();
+    const latestText = getAssistantText(latestNode);
+    const responseChanged = Boolean(latestNode && latestText &&
+      (latestNode !== beforeNode || latestText !== beforeText));
+    if (composerText !== normalizeComposerText(expectedText) || responseChanged || !isGenerationStopped()) {
+      return true;
+    }
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  return false;
+}
+
+function retryComposerSubmission(input) {
+  const form = input?.closest?.("form");
+  if (form && typeof form.requestSubmit === "function") {
+    form.requestSubmit();
+    return;
+  }
+  for (const type of ["keydown", "keypress", "keyup"]) {
+    input.dispatchEvent(new KeyboardEvent(type, {
+      key: "Enter", code: "Enter", keyCode: 13, which: 13,
+      bubbles: true, cancelable: true
+    }));
+  }
+}
+
 async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
   const input = await waitForInput(10000);
   const beforeNode = getLatestAssistantNode();
@@ -344,6 +374,16 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
 
   const button = await waitForSendButton(10000, input, text);
   button.click();
+
+  let submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text);
+  if (!submitted && normalizeComposerText(readComposerText(input)) === normalizeComposerText(text)) {
+    retryComposerSubmission(input);
+    submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text, 2500);
+  }
+
+  if (!submitted) {
+    throw new Error("ChatGPT no confirmó el envío: el mensaje sigue en el compositor y no comenzó una respuesta nueva");
+  }
 
   return waitForCompletedResponse(
     beforeNode,
