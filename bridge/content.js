@@ -56,6 +56,164 @@ function isEnabled(node) {
     node.getAttribute("aria-disabled") !== "true";
 }
 
+function isNodeConnected(node) {
+  if (!node) return false;
+  if (typeof node.isConnected === "boolean") return node.isConnected;
+  const root = document.documentElement || document.body;
+  if (root?.contains) return root.contains(node);
+  // Some unit-test DOM fixtures do not model Node.isConnected/contains.
+  return true;
+}
+
+function matchingInputSelectors(node) {
+  return INPUT_SELECTORS.filter(selector => {
+    try { return Boolean(node?.matches?.(selector)); } catch { return false; }
+  });
+}
+
+function describeComposer(node, expectedText, originalNode = node) {
+  if (!node) return null;
+  let value = "";
+  try { value = readComposerText(node); } catch {}
+  const expected = normalizeComposerText(expectedText);
+  let visible = false;
+  let enabled = false;
+  try { visible = isVisible(node); enabled = isEnabled(node); } catch {}
+  return {
+    tag: String(node.tagName || node.nodeName || "unknown").toLowerCase(),
+    type: String(node.type || node.getAttribute?.("type") || ""),
+    role: String(node.getAttribute?.("role") || ""),
+    selectors: matchingInputSelectors(node),
+    connected: isNodeConnected(node),
+    activeElement: document.activeElement === node,
+    visible,
+    enabled,
+    matchesExpected: normalizeComposerText(value) === expected,
+    currentLength: value.length,
+    expectedLength: expected.length,
+    sameAsOriginal: node === originalNode
+  };
+}
+
+function describeSendButton(node, input, source = "unknown") {
+  if (!node) return null;
+  let visible = false;
+  let enabled = false;
+  try { visible = isVisible(node); enabled = isEnabled(node); } catch {}
+  const inputForm = input?.closest?.("form") || null;
+  const buttonForm = node?.closest?.("form") || null;
+  const scoped = input ? findComposerScopedSendButton(input) : null;
+  return {
+    source,
+    tag: String(node.tagName || node.nodeName || "unknown").toLowerCase(),
+    testId: String(node.getAttribute?.("data-testid") || ""),
+    ariaLabel: String(node.getAttribute?.("aria-label") || ""),
+    title: String(node.getAttribute?.("title") || ""),
+    type: String(node.getAttribute?.("type") || ""),
+    connected: isNodeConnected(node),
+    visible,
+    enabled,
+    sameForm: Boolean(inputForm && buttonForm === inputForm),
+    composerScoped: Boolean(scoped && scoped === node),
+    associated: isSendButtonAssociated(input, node, scoped)
+  };
+}
+
+function collectSendCandidates(input) {
+  const candidates = [];
+  for (const selector of SEND_SELECTORS) {
+    for (const node of document.querySelectorAll(selector)) {
+      let item = candidates.find(candidate => candidate.node === node);
+      if (!item) {
+        item = { node, selectors: [] };
+        candidates.push(item);
+      }
+      item.selectors.push(selector);
+    }
+  }
+  const scopedNode = findComposerScopedSendButton(input);
+  const global = candidates.map(({ node, selectors }) => ({
+    ...describeSendButton(node, input, selectors[0]),
+    selectors
+  })).slice(0, 8);
+  let visible = 0;
+  let enabled = 0;
+  for (const { node } of candidates) {
+    if (isNodeConnected(node) && isVisible(node)) visible++;
+    if (isNodeConnected(node) && isEnabled(node)) enabled++;
+  }
+  return {
+    globalTotal: candidates.length,
+    globalVisible: visible,
+    globalEnabled: enabled,
+    scoped: scopedNode ? describeSendButton(scopedNode, input, "composer-scoped") : null,
+    global: global.slice(0, 8)
+  };
+}
+
+function isSendButtonAssociated(input, button, scopedCandidate = null) {
+  if (!input || !button || !isNodeConnected(input) || !isNodeConnected(button)) return false;
+  const inputForm = input.closest?.("form") || null;
+  if (inputForm) return button === inputForm || button.closest?.("form") === inputForm;
+  // For contenteditables without a form, only trust the control found by the
+  // narrow composer-scoped search. A matching global selector is insufficient.
+  return Boolean(scopedCandidate && button === scopedCandidate);
+}
+
+function sourceForSendButton(input, button) {
+  const scoped = findComposerScopedSendButton(input);
+  if (scoped && scoped === button) return "composer-scoped";
+  for (const selector of SEND_SELECTORS) {
+    if ([...document.querySelectorAll(selector)].includes(button)) return selector;
+  }
+  return "unknown";
+}
+
+function createSendDiagnostic(jobId, expectedText) {
+  return {
+    jobId: String(jobId || ""),
+    startedAt: Date.now(),
+    expectedLength: normalizeComposerText(expectedText).length,
+    events: [],
+    omittedEvents: 0
+  };
+}
+
+function recordSendDiagnostic(diagnostic, stage, details = {}) {
+  if (!diagnostic) return;
+  if (diagnostic.events.length >= 16) {
+    diagnostic.omittedEvents++;
+    return;
+  }
+  diagnostic.events.push({
+    stage,
+    elapsedMs: Math.max(0, Date.now() - diagnostic.startedAt),
+    ...details
+  });
+}
+
+function sendFailureCode(error) {
+  const message = String(error?.message || "");
+  if (/no confirmó el envío/i.test(message)) return "submission_unconfirmed";
+  if (/botón de envío|compositor de ChatGPT|insertar el mensaje/i.test(message)) return "composer_or_send_control";
+  if (/desconectado|no está conectado|no se pudo verificar/i.test(message)) return "stale_or_unassociated_send_control";
+  return "send_operation_error";
+}
+
+function emitSendDiagnostic(diagnostic, outcome, errorCode = null) {
+  if (!diagnostic) return;
+  const summary = {
+    jobId: diagnostic.jobId,
+    outcome,
+    expectedLength: diagnostic.expectedLength,
+    events: diagnostic.events,
+    omittedEvents: diagnostic.omittedEvents
+  };
+  if (errorCode) summary.errorCode = errorCode;
+  // Single bounded, content-free record for this job; never log prompt/answer text.
+  try { console.info("[BRIDGE_SEND_DIAG]", JSON.stringify(summary)); } catch {}
+}
+
 function readComposerText(element) {
   if (!element) return "";
   if (element.matches?.("textarea, input")) return String(element.value ?? "");
@@ -249,42 +407,78 @@ function findComposerScopedSendButton(input) {
 }
 
 function findEnabledSendButton(input) {
-  // Search known accessibility contracts first. A disabled match must not mask
-  // another enabled send button exposed under a different label/DOM contract.
+  // Prefer the candidate discovered inside this composer before any document-wide
+  // match. A global selector match is not proof that a control belongs to input.
+  const scoped = findComposerScopedSendButton(input);
+  if (scoped && isNodeConnected(scoped) && isEnabled(scoped)) return scoped;
+
+  const inputForm = input?.closest?.("form") || null;
+  if (!inputForm) return null;
+
+  // Global fallback is allowed only when the input belongs to a form and the
+  // candidate belongs to that same form.
   for (const selector of SEND_SELECTORS) {
     const nodes = document.querySelectorAll(selector);
     for (const node of nodes) {
-      if (isEnabled(node)) return node;
+      if (isNodeConnected(node) && isEnabled(node) && node.closest?.("form") === inputForm) {
+        return node;
+      }
     }
   }
-
-  const scoped = findComposerScopedSendButton(input);
-  if (scoped && isEnabled(scoped)) return scoped;
   return null;
 }
 
-async function waitForSendButton(timeoutMs, input, expectedText) {
+async function waitForSendButton(timeoutMs, initialInput, expectedText, diagnostic) {
   const started = Date.now();
+  let input = initialInput;
   let sawVisibleCandidate = false;
   while (Date.now() - started < timeoutMs) {
+    const activeInput = getInput();
+    if (activeInput && activeInput !== input) {
+      recordSendDiagnostic(diagnostic, "composer_replaced_while_finding_button", {
+        original: describeComposer(input, expectedText, initialInput),
+        active: describeComposer(activeInput, expectedText, initialInput)
+      });
+      if (!isNodeConnected(activeInput) ||
+          normalizeComposerText(readComposerText(activeInput)) !== normalizeComposerText(expectedText)) {
+        throw new Error("El compositor activo cambió y ya no contiene el mensaje esperado; no se envió");
+      }
+      input = activeInput;
+    }
+
     for (const selector of SEND_SELECTORS) {
       for (const node of document.querySelectorAll(selector)) {
-        if (isVisible(node)) sawVisibleCandidate = true;
+        if (isNodeConnected(node) && isVisible(node)) sawVisibleCandidate = true;
       }
     }
 
     const actualText = normalizeComposerText(readComposerText(input));
     const expected = normalizeComposerText(expectedText);
     if (actualText !== expected) {
+      recordSendDiagnostic(diagnostic, "composer_text_mismatch_before_send", {
+        composer: describeComposer(input, expectedText, initialInput)
+      });
       throw new Error("El texto no quedó correctamente insertado en el cuadro de ChatGPT");
     }
 
     if (findComposerScopedSendButton(input)) sawVisibleCandidate = true;
     const button = findEnabledSendButton(input);
-    if (button) return button;
+    if (button && isNodeConnected(button) && isEnabled(button) &&
+        isSendButtonAssociated(input, button, findComposerScopedSendButton(input))) {
+      recordSendDiagnostic(diagnostic, "send_button_located", {
+        composer: describeComposer(input, expectedText, initialInput),
+        button: describeSendButton(button, input, sourceForSendButton(input, button)),
+        candidates: collectSendCandidates(input)
+      });
+      return { input, button };
+    }
     await new Promise(r => setTimeout(r, 200));
   }
 
+  recordSendDiagnostic(diagnostic, "send_button_lookup_timeout", {
+    composer: describeComposer(getInput() || input, expectedText, initialInput),
+    candidates: collectSendCandidates(getInput() || input)
+  });
   if (sawVisibleCandidate) {
     throw new Error("El botón de envío de ChatGPT sigue deshabilitado después de insertar el mensaje");
   }
@@ -430,12 +624,9 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   );
 }
 
-async function waitForComposerSubmission(input, beforeNode, beforeText, expectedText, generationObservation, timeoutMs = 1800) {
+async function waitForComposerSubmission(input, beforeNode, beforeText, expectedText, generationObservation, diagnostic, selectedButton, timeoutMs = 1800) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    // ChatGPT may replace its contenteditable during a React render. Inspect
-    // the live composer first; the original node can retain stale text after
-    // being detached and must not suppress a valid submission signal.
     const activeInput = getInput();
     const composerText = normalizeComposerText(readComposerText(activeInput || input));
     const latestNode = getLatestAssistantNode();
@@ -443,51 +634,164 @@ async function waitForComposerSubmission(input, beforeNode, beforeText, expected
     const responseChanged = Boolean(latestNode && latestText &&
       (latestNode !== beforeNode || latestText !== beforeText));
     const stopControl = findVisibleStopControl();
-    if (composerText !== normalizeComposerText(expectedText) || responseChanged ||
-        stopControl || generationObservation?.observed === true) {
+    const signals = {
+      composerChanged: composerText !== normalizeComposerText(expectedText),
+      responseChanged,
+      stopVisible: Boolean(stopControl),
+      generationObserved: generationObservation?.observed === true
+    };
+    if (signals.composerChanged || signals.responseChanged || signals.stopVisible || signals.generationObserved) {
+      recordSendDiagnostic(diagnostic, "submission_signal_observed", {
+        signals,
+        composer: describeComposer(activeInput || input, expectedText, input),
+        button: describeSendButton(selectedButton, activeInput || input, sourceForSendButton(activeInput || input, selectedButton))
+      });
       return true;
     }
     await new Promise(resolve => setTimeout(resolve, 150));
   }
+  const activeInput = getInput();
+  recordSendDiagnostic(diagnostic, "submission_unconfirmed", {
+    waitMs: Date.now() - started,
+    signals: {
+      composerChanged: normalizeComposerText(readComposerText(activeInput || input)) !== normalizeComposerText(expectedText),
+      responseChanged: Boolean((() => {
+        const latestNode = getLatestAssistantNode();
+        const latestText = getAssistantText(latestNode);
+        return latestNode && latestText && (latestNode !== beforeNode || latestText !== beforeText);
+      })()),
+      stopVisible: Boolean(findVisibleStopControl()),
+      generationObserved: generationObservation?.observed === true
+    },
+    composer: describeComposer(activeInput || input, expectedText, input),
+    button: describeSendButton(selectedButton, activeInput || input, sourceForSendButton(activeInput || input, selectedButton))
+  });
   return false;
 }
 
-async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
-  const input = await waitForInput(10000);
-  const beforeNode = getLatestAssistantNode();
-  const beforeText = getAssistantText(beforeNode);
-
-  insertText(input, text);
-
-  const button = await waitForSendButton(10000, input, text);
-  generationObserved = false;
-  const sentAt = Date.now();
-  const generationObserver = observeGenerationStart();
+async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, jobId = "") {
+  const diagnostic = createSendDiagnostic(jobId, text);
+  let generationObserver = null;
+  let diagnosticOutcome = "error";
+  let diagnosticErrorCode = null;
+  let input = null;
 
   try {
-    button.click();
+    input = await waitForInput(10000);
+    const originalInput = input;
+    const beforeNode = getLatestAssistantNode();
+    const beforeText = getAssistantText(beforeNode);
+    recordSendDiagnostic(diagnostic, "composer_found", {
+      composer: describeComposer(input, text, originalInput)
+    });
 
-    const submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text, generationObserver);
+    insertText(input, text);
+    recordSendDiagnostic(diagnostic, "after_insert", {
+      composer: describeComposer(input, text, originalInput)
+    });
+
+    const resolution = await waitForSendButton(10000, input, text, diagnostic);
+    input = resolution.input;
+    let button = resolution.button;
+
+    // This is still before the first click. Re-resolving a stale candidate here
+    // cannot duplicate a send because no send action has yet been attempted.
+    const activeInput = getInput();
+    recordSendDiagnostic(diagnostic, "pre_click_state", {
+      composer: describeComposer(activeInput || input, text, originalInput),
+      selectedButton: describeSendButton(button, activeInput || input, sourceForSendButton(activeInput || input, button)),
+      candidates: collectSendCandidates(activeInput || input)
+    });
+    if (!activeInput || !isNodeConnected(activeInput)) {
+      throw new Error("No se pudo verificar un compositor activo conectado al DOM; no se envió");
+    }
+    if (normalizeComposerText(readComposerText(activeInput)) !== normalizeComposerText(text)) {
+      throw new Error("El compositor activo ya no contiene el mensaje esperado; no se envió");
+    }
+    input = activeInput;
+
+    const currentButton = findEnabledSendButton(input);
+    if (!currentButton || !isNodeConnected(currentButton) || !isEnabled(currentButton) ||
+        !isSendButtonAssociated(input, currentButton, findComposerScopedSendButton(input))) {
+      recordSendDiagnostic(diagnostic, "pre_click_rejected", {
+        composer: describeComposer(input, text, originalInput),
+        candidates: collectSendCandidates(input),
+        selectedButton: describeSendButton(button, input, sourceForSendButton(input, button))
+      });
+      throw new Error("No se pudo verificar un botón de envío vigente y asociado al compositor activo; no se envió");
+    }
+    if (currentButton !== button || !isNodeConnected(button)) {
+      recordSendDiagnostic(diagnostic, "stale_button_replaced_before_click", {
+        oldButton: describeSendButton(button, input, sourceForSendButton(input, button)),
+        currentButton: describeSendButton(currentButton, input, sourceForSendButton(input, currentButton))
+      });
+      button = currentButton;
+    } else {
+      button = currentButton;
+    }
+
+    // Final synchronous guard immediately before the single click.
+    if (!isNodeConnected(input) || getInput() !== input || !isNodeConnected(button) ||
+        !isEnabled(button) ||
+        !isSendButtonAssociated(input, button, findComposerScopedSendButton(input))) {
+      throw new Error("El compositor o el botón cambió antes del clic; no se envió");
+    }
+
+    generationObserved = false;
+    const sentAt = Date.now();
+    generationObserver = observeGenerationStart();
+    recordSendDiagnostic(diagnostic, "before_click", {
+      composer: describeComposer(input, text, originalInput),
+      button: describeSendButton(button, input, sourceForSendButton(input, button)),
+      candidates: collectSendCandidates(input)
+    });
+
+    try {
+      button.click();
+    } catch (error) {
+      recordSendDiagnostic(diagnostic, "click_threw", {
+        button: describeSendButton(button, input, sourceForSendButton(input, button)),
+        errorName: String(error?.name || "Error")
+      });
+      throw error;
+    }
+
+    recordSendDiagnostic(diagnostic, "after_click", {
+      composer: describeComposer(getInput() || input, text, originalInput),
+      button: describeSendButton(button, getInput() || input, sourceForSendButton(input, button)),
+      generationObserved: generationObserver?.observed === true
+    });
+
+    const submitted = await waitForComposerSubmission(
+      input, beforeNode, beforeText, text, generationObserver, diagnostic, button
+    );
     if (!submitted) {
       throw new Error("ChatGPT no confirmó el envío de forma inequívoca; no se reintentó para evitar duplicar el mensaje");
     }
 
-    return await waitForCompletedResponse(
-      beforeNode,
-      beforeText,
-      sentAt,
-      timeoutMs,
-      minTurnDelayMs
-    );
+    recordSendDiagnostic(diagnostic, "submission_confirmed", {
+      elapsedMs: Date.now() - sentAt,
+      composer: describeComposer(getInput() || input, text, originalInput)
+    });
+    diagnosticOutcome = "waiting_for_response";
+    return await waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs);
+  } catch (error) {
+    diagnosticErrorCode = sendFailureCode(error);
+    recordSendDiagnostic(diagnostic, "terminal_error", {
+      code: diagnosticErrorCode,
+      stageCount: diagnostic.events.length
+    });
+    throw error;
   } finally {
     generationObserver?.disconnect();
+    emitSendDiagnostic(diagnostic, diagnosticOutcome, diagnosticErrorCode);
   }
 }
 
 async function runTurn(message) {
   let completion;
   try {
-    const text = await sendAndWait(message.text, Number(message.timeoutMs) || 60000, Number(message.minTurnDelayMs) || 0);
+    const text = await sendAndWait(message.text, Number(message.timeoutMs) || 60000, Number(message.minTurnDelayMs) || 0, message.jobId);
     completion = { ok: true, text };
   } catch (error) {
     completion = { ok: false, error: error?.message || String(error) };
