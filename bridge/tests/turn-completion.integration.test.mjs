@@ -97,14 +97,14 @@ async function harness(mode = "success", options = {}) {
         if (name === "type") return "submit";
         return null;
       },
-      click() { if (mode === "error") throw new Error("DOM integrado controlado"); assistant.push(node); }
+      click() { if (mode === "error") throw new Error("DOM integrado controlado"); if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     structuralSendButton = {
       disabled: true,
       // Simulates an icon-only send control with no accessible label, test-id,
       // submit type, or wrapping form.
       getAttribute() { return null; },
-      click() { if (mode === "error") throw new Error("DOM integrado controlado"); assistant.push(node); }
+      click() { if (mode === "error") throw new Error("DOM integrado controlado"); if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     const document = {
       querySelectorAll(selector) {
