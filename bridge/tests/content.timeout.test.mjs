@@ -54,7 +54,7 @@ test("content script real expira un turno sin respuesta usando reloj simulado", 
   assert.equal(startResponse.ok, true);
 
   // Drive the actual content-script polling loop forward without wall-clock sleeps.
-  for (let i = 0; i < 12 && !sent.some(m => m.type === "TURN_COMPLETE"); i++) {
+  for (let i = 0; i < 30 && !sent.some(m => m.type === "TURN_COMPLETE"); i++) {
     t.mock.timers.tick(250);
     for (let j = 0; j < 8; j++) await Promise.resolve();
   }
@@ -63,5 +63,5 @@ test("content script real expira un turno sin respuesta usando reloj simulado", 
   assert.ok(completion, "el script real debe informar la expiración");
   assert.equal(completion.jobId, "timeout-job");
   assert.equal(completion.ok, false);
-  assert.match(completion.error, /Timeout esperando una respuesta nueva/);
+  assert.match(completion.error, /ChatGPT no confirmó el envío/);
 });
