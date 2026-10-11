@@ -276,3 +276,14 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Validación:** CI de este nuevo SHA pendiente. La prueba automatizada usa DOM/mocks en Node; todavía no equivale a una prueba de la sesión real de Chrome.
 - **Próximo paso:** ejecutar CI y, si pasa, sincronizar la extensión local y recargar tanto la extensión como la pestaña del panel BRIDGE.
 - **TIMER:** parche y prueba automatizada estimados en 30–60 min; sincronización local 5–10 min; comprobación real 10–20 min. Tiempo medido no disponible.
+
+
+### BRIDGE-014 — CI de iteraciones = 1 verificada
+
+- **Corrección inicial:** `c2bc01166fdc1aeb1151c48b283546ee6d65ee4f`; la primera CI, [run 38125372557](https://github.com/jonhararagi/botarquitecto/actions/runs/38125372557), detectó una aserción estática antigua, no un fallo de sintaxis ni de ejecución del panel. Se corrigieron las expectativas del contrato estático y la comparación del valor de campo.
+- **SHA de código y pruebas validado:** `23b75be9540b117c0858d0e138545a5d4e409cbf`.
+- **CI final:** [run 38125418024](https://github.com/jonhararagi/botarquitecto/actions/runs/38125418024), conclusión `success` sobre ese SHA exacto.
+- **Cobertura:** el test simula el panel con polling cada 700 ms, edita Iteraciones a exactamente `1`, comprueba que no cambie a `10`, y confirma que `SAVE_SESSION` y `START_LOOP` reciben `1`. Se unificó el parseo acotado para Guardar e Iniciar.
+- **Límite:** es una prueba automatizada del panel con DOM/Chrome API simulados en Node. La sesión del Chrome local aún no ha sido observada por esta herramienta; validación real `NOT_RUN`.
+- **Estado:** PR #6 sigue abierto y `main` intacto. No afirmar que el loop CEREBRO→OBRERO real ya funciona hasta probar el navegador.
+- **TIMER:** CI completada; quedan 5–10 min para sincronizar y recargar localmente, y 10–20 min para la prueba de Chrome real. Tiempo efectivo no medido.

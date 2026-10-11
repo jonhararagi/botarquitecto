@@ -235,3 +235,11 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - La regresión de control pasa a probar `1`, no solo `2`, incluyendo el valor enviado a `SAVE_SESSION` y a `START_LOOP`.
 - CI y Chrome real: pendientes al crear este checkpoint. PR #6 permanece abierto; no se modifica `main`.
 - **TIMER:** validación CI pendiente; luego 10–20 min para prueba manual real.
+
+
+### BRIDGE-014 — verificación automatizada completada
+
+- `23b75be9540b117c0858d0e138545a5d4e409cbf` pasó en [GitHub Actions run 38125418024](https://github.com/jonhararagi/botarquitecto/actions/runs/38125418024).
+- La regresión de panel confirma que Iteraciones = `1` sobrevive al polling y se envía igual en `SAVE_SESSION` y `START_LOOP`.
+- La prueba real en Chrome/Brave sigue pendiente. PR #6 abierto; `main` no modificado.
+- **TIMER:** quedan sincronización local (5–10 min estimados) y prueba manual de Chrome (10–20 min estimados).
