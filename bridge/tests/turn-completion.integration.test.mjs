@@ -56,6 +56,7 @@ async function harness(mode = "success", options = {}) {
     const transientStop = options.transientStop === true && tabId === 11;
     const preserveComposer = options.preserveComposer === true && tabId === 11;
     const noAssistantResponse = options.noAssistantResponse === true && tabId === 11;
+    const replaceComposerOnClick = options.replaceComposerOnClick === true && tabId === 11;
     const mutationObservers = [];
     class MockMutationObserver {
       constructor(callback) { this.callback = callback; this.active = false; mutationObservers.push(this); }
@@ -77,7 +78,7 @@ async function harness(mode = "success", options = {}) {
         return controls;
       }
     };
-    const input = {
+    let input = {
       textContent: "",
       parentElement: composerToolbar,
       get innerText() { return this.textContent; },
@@ -95,6 +96,7 @@ async function harness(mode = "success", options = {}) {
       },
       getAttribute() { return null; }
     };
+    const initialInput = input;
       const replyText = options.partialResponse && tabId === 11 ? "respuesta parcial" : tabId === 22 ? "respuesta OBRERO integrada" : "respuesta integrada";
       const node = {
       innerText: replyText + " [[BRIDGE_DONE]]",
@@ -113,6 +115,20 @@ async function harness(mode = "success", options = {}) {
       sendAttempts.click++;
       if (mode === "error") throw new Error("DOM integrado controlado");
       if (ambiguousClick) return;
+      if (replaceComposerOnClick) {
+        input = {
+          textContent: "",
+          parentElement: composerToolbar,
+          get innerText() { return this.textContent; },
+          focus() {},
+          matches: () => false,
+          closest() { return null; },
+          compareDocumentPosition(other) { return other === structuralSendButton ? 4 : 0; },
+          dispatchEvent() {},
+          getAttribute() { return null; }
+        };
+        return;
+      }
       stopVisible = true;
       if (transientStop) {
         stopMarker.transientWasVisible = true;
@@ -192,6 +208,7 @@ async function harness(mode = "success", options = {}) {
       listener: (m, s, respond) => runtimeListeners.message(m, s, respond),
       messages: [], attempts: sendAttempts,
       composerText: () => input.textContent,
+      originalComposerText: () => initialInput.textContent,
       assistantCount: () => assistant.length
     };
     // Observe the actual terminal reports without altering the message delivered to the worker.
@@ -368,6 +385,33 @@ test("a transient Stop signal is retained when the response completes before the
   const session = (await h.state()).sessions[0];
   assert.equal(session.iteration, 1);
   assert.match(session.status, /^LIMIT_REACHED/);
+});
+
+test("submission confirmation reads the active composer after ChatGPT replaces its DOM node", async () => {
+  const h = await harness("success", {
+    maxIterations: 1,
+    replaceComposerOnClick: true,
+    noAssistantResponse: true
+  });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(300);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report, "the job must report a terminal state");
+  assert.equal(report.ok, false, "a cleared composer without a new assistant answer is not success");
+  assert.match(
+    report.error,
+    /Timeout esperando una respuesta nueva de ChatGPT/,
+    "a replaced and cleared live composer should confirm submission and move to response waiting"
+  );
+  assert.equal(content.originalComposerText(), "prompt sintético", "the detached old node retains its old value");
+  assert.equal(content.composerText(), "", "the current active composer is empty");
+  assert.equal(content.assistantCount(), 0);
+  assert.equal(content.attempts.click, 1);
+  assert.equal(content.attempts.keyboard, 0);
 });
 
 test("a transient Stop insertion is positive evidence of submission even if the composer remains populated", async () => {
