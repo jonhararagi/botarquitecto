@@ -50,6 +50,7 @@ async function harness(mode = "success", options = {}) {
   async function getContent(tabId) {
     if (contents.has(tabId)) return contents.get(tabId);
     const useStructuralSendButton = options.workerSendVariant === "structural" && tabId === 22;
+    const useKeyboardFallback = options.keyboardFallback === true && tabId === 11;
     let localizedSendButton;
     let structuralSendButton;
     const composerToolbar = {
@@ -68,6 +69,7 @@ async function harness(mode = "success", options = {}) {
       closest() { return null; },
       compareDocumentPosition(other) { return other === structuralSendButton ? 4 : 0; },
       dispatchEvent(event) {
+        if (event.type === "keydown" && event.key === "Enter" && useKeyboardFallback) { this.textContent = ""; assistant.push(node); }
         if (event.type === "input" && this.textContent) {
           if (localizedSendButton) localizedSendButton.disabled = false;
           if (structuralSendButton) structuralSendButton.disabled = false;
@@ -86,7 +88,7 @@ async function harness(mode = "success", options = {}) {
     const sendButton = {
       disabled: true,
       getAttribute(name) { return name === "data-testid" ? "send-button" : null; },
-      click() { if (mode === "error") throw new Error("DOM integrado controlado"); assistant.push(node); }
+      click() { if (mode === "error") throw new Error("DOM integrado controlado"); if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     localizedSendButton = {
       disabled: true,
@@ -129,7 +131,7 @@ async function harness(mode = "success", options = {}) {
       chrome, document, Date: FastDate,
       setTimeout: callback => { queueMicrotask(callback); return 1; }, clearTimeout: () => {},
       Promise, console, queueMicrotask,
-      InputEvent: class { constructor(type) { this.type = type; } }, Event: class { constructor(type) { this.type = type; } },
+      InputEvent: class { constructor(type) { this.type = type; } }, Event: class { constructor(type) { this.type = type; } }, KeyboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
       HTMLInputElement: class {}, HTMLTextAreaElement: class {},
       getComputedStyle: () => ({ display: "block", visibility: "visible" })
     });
@@ -287,4 +289,21 @@ test("CEREBRO→OBRERO completes when OBRERO exposes only an icon-only composer 
   assert.equal(completed.iteration, 2);
   assert.match(completed.status, /^LIMIT_REACHED/);
   assert.ok(completed.log.some(entry => entry.role === "OBRERO" && entry.text === "respuesta OBRERO integrada"));
+});
+
+
+test("content script retries Enter only when clicking leaves the prompt unsent", async () => {
+  const h = await harness("success", { keyboardFallback: true });
+  const brainContent = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  brainContent.listener(startMessage, {}, () => {});
+  await flush(200);
+
+  const report = brainContent.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report, "content script must report a terminal result");
+  assert.equal(report.ok, true, report.error);
+  assert.equal(report.role, "CEREBRO");
+  assert.equal(report.text, "respuesta integrada");
+  assert.ok(h.starts.some(item => item.message.type === "START_TURN" && item.tabId === 11));
 });
