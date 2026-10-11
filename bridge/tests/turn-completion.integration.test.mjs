@@ -102,6 +102,7 @@ async function harness(mode = "success", options = {}) {
     };
     const assistant = [];
     const stopMarker = {
+      tagName: "BUTTON",
       disabled: false,
       getAttribute(name) { return name === "data-testid" ? "stop-generating" : null; },
       innerText: "", textContent: ""
