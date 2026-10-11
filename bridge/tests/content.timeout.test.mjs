@@ -9,19 +9,36 @@ test("content script real expira un turno sin respuesta usando reloj simulado", 
   t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   const source = await readFile(CONTENT_PATH, "utf8");
   const sent = [];
+  const form = {
+    querySelectorAll(selector) {
+      if (selector === "button, [role='button']" || selector === "button") return [button];
+      return [];
+    },
+    contains(node) { return node === input || node === button; }
+  };
   const input = {
+    tagName: "DIV",
     textContent: "",
+    isConnected: true,
+    parentElement: form,
     focus() {},
     matches() { return false; },
+    closest(selector) { return selector === "form" ? form : null; },
+    compareDocumentPosition(node) { return node === button ? 4 : 0; },
     dispatchEvent() {},
     getAttribute() { return null; }
   };
   const button = {
+    tagName: "BUTTON",
     disabled: false,
-    getAttribute() { return null; },
+    isConnected: true,
+    closest(selector) { return selector === "form" ? form : null; },
+    getAttribute(name) { return name === "data-testid" ? "send-button" : null; },
     click() {}
   };
   const document = {
+    documentElement: { contains(node) { return node === input || node === button; } },
+    activeElement: input,
     querySelectorAll(selector) {
       if (selector === "#prompt-textarea") return [input];
       if (selector === 'button[data-testid="send-button"]') return [button];
