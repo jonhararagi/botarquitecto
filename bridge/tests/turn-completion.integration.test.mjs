@@ -9,7 +9,7 @@ const contentPath = new URL("../content.js", import.meta.url);
 
 function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }
 
-async function harness(mode = "success") {
+async function harness(mode = "success", options = {}) {
   const callbacks = { message: null, removed: null, clicked: null };
   const tabs = new Map([
     [11, { id: 11, url: "https://chatgpt.com/", title: "CEREBRO", windowId: 1 }],
@@ -49,14 +49,29 @@ async function harness(mode = "success") {
   }
   async function getContent(tabId) {
     if (contents.has(tabId)) return contents.get(tabId);
+    const useStructuralSendButton = options.workerSendVariant === "structural" && tabId === 22;
     let localizedSendButton;
+    let structuralSendButton;
+    const composerToolbar = {
+      parentElement: null,
+      querySelectorAll(selector) {
+        return selector === "button, [role='button']" && structuralSendButton
+          ? [structuralSendButton] : [];
+      }
+    };
     const input = {
       textContent: "",
+      parentElement: composerToolbar,
       get innerText() { return this.textContent; },
       focus() {},
       matches: () => false,
+      closest() { return null; },
+      compareDocumentPosition(other) { return other === structuralSendButton ? 4 : 0; },
       dispatchEvent(event) {
-        if (event.type === "input" && this.textContent) localizedSendButton.disabled = false;
+        if (event.type === "input" && this.textContent) {
+          if (localizedSendButton) localizedSendButton.disabled = false;
+          if (structuralSendButton) structuralSendButton.disabled = false;
+        }
       },
       getAttribute() { return null; }
     };
@@ -81,12 +96,19 @@ async function harness(mode = "success") {
       },
       click() { if (mode === "error") throw new Error("DOM integrado controlado"); assistant.push(node); }
     };
+    structuralSendButton = {
+      disabled: true,
+      // Simulates an icon-only send control with no accessible label, test-id,
+      // submit type, or wrapping form.
+      getAttribute() { return null; },
+      click() { if (mode === "error") throw new Error("DOM integrado controlado"); assistant.push(node); }
+    };
     const document = {
       querySelectorAll(selector) {
         if (selector === "#prompt-textarea" || selector === 'textarea[name="prompt-textarea"]' ||
             selector === 'div[contenteditable="true"][role="textbox"]') return [input];
-        if (selector === 'button[data-testid="send-button"]' || selector === 'button[data-testid*="send" i]') return [sendButton];
-        if (selector === 'button[aria-label*="enviar" i]') return [localizedSendButton];
+        if (selector === 'button[data-testid="send-button"]' || selector === 'button[data-testid*="send" i]') return useStructuralSendButton ? [] : [sendButton];
+        if (selector === 'button[aria-label*="enviar" i]') return useStructuralSendButton ? [] : [localizedSendButton];
         if (selector === '[data-message-author-role="assistant"]' || selector === "article") return assistant;
         if (selector.includes("stop-button") || selector.includes("Stop") || selector.includes("Detener")) return [];
         return [];
@@ -129,7 +151,7 @@ async function harness(mode = "success") {
   assert.equal(initial.ok, true);
   const sessionId = initial.state.sessions[0].id;
   const start = await call({ type: "START_LOOP", sessionId, brainTabId: 11, workerTabId: 22,
-    seed: "prompt sintético", maxIterations: 1, brainTimeoutMs: 5000, workerTimeoutMs: 5000 });
+    seed: "prompt sintético", maxIterations: options.maxIterations ?? 1, brainTimeoutMs: 5000, workerTimeoutMs: 5000 });
   assert.equal(start.ok, true, start.error);
   return { call, sessionId, contents, starts, getContent, state: async () => (await call({ type: "GET_STATE" })).state };
 }
@@ -230,4 +252,38 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   assert.equal(preserved.activeJobId, newState.activeJobId);
   assert.equal(preserved.iteration, 0);
   assert.equal(preserved.running, true);
+});
+
+
+test("CEREBRO→OBRERO completes when OBRERO exposes only an icon-only composer control", async () => {
+  const h = await harness("success", { maxIterations: 2, workerSendVariant: "structural" });
+  const brainContent = await h.getContent(11);
+  const brainStart = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  brainContent.listener(brainStart, {}, () => {});
+  await flush(150);
+
+  const brainReport = brainContent.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(brainReport, "CEREBRO must complete its first turn");
+  assert.equal(brainReport.ok, true);
+  assert.equal(brainReport.text, "respuesta integrada");
+
+  const workerStartItem = h.starts.find(item => item.tabId === 22 && item.message.type === "START_TURN");
+  assert.ok(workerStartItem, "verified CEREBRO output must be handed off to OBRERO");
+  assert.equal(workerStartItem.message.text, "respuesta integrada");
+
+  const workerContent = await h.getContent(22);
+  workerContent.listener(workerStartItem.message, {}, () => {});
+  await flush(150);
+
+  const workerReport = workerContent.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(workerReport, "OBRERO content script must report a terminal result");
+  assert.equal(workerReport.role, "OBRERO");
+  assert.equal(workerReport.ok, true);
+  assert.equal(workerReport.text, "respuesta integrada");
+
+  const completed = (await h.state()).sessions[0];
+  assert.equal(completed.iteration, 2);
+  assert.match(completed.status, /^LIMIT_REACHED/);
+  assert.ok(completed.log.some(entry => entry.role === "OBRERO" && entry.text === "respuesta integrada"));
 });

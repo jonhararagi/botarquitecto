@@ -157,9 +157,93 @@ async function waitForInput(timeoutMs) {
   throw new Error("ChatGPT input not found");
 }
 
+function controlLabel(button) {
+  return [
+    button.getAttribute?.("data-testid"),
+    button.getAttribute?.("aria-label"),
+    button.getAttribute?.("title"),
+    button.innerText,
+    button.textContent
+  ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function isClearlyAuxiliaryControl(button) {
+  const label = controlLabel(button);
+  return /voice|audio|microphone|\bmic\b|dictat|record|attach|upload|\bfile\b|\btool(s)?\b|\bplus\b|stop|cancel|clear|search|menu|settings|camera|image|hablar|voz|micr[oó]fono|dictado|grabar|adjuntar|subir|archivo|herramienta|detener|cancelar|borrar|buscar|men[uú]|configuraci[oó]n|c[aá]mara/.test(label);
+}
+
+function isAfterComposerInput(input, control) {
+  try {
+    // Node.DOCUMENT_POSITION_FOLLOWING is 4. Using the relation keeps the
+    // fallback inside the composer branch rather than clicking page controls.
+    return Boolean(input.compareDocumentPosition(control) & 4);
+  } catch {
+    return false;
+  }
+}
+
+function findComposerScopedSendButton(input) {
+  // Recent ChatGPT composer variants may expose an icon-only send control with
+  // no stable test-id, accessible label, title, or surrounding form.
+  // Walk only a short chain of ancestors that contain the actual composer.
+  let scope = input?.parentElement || null;
+  for (let depth = 0; scope && depth < 8; depth++, scope = scope.parentElement) {
+    if (!scope.querySelectorAll) continue;
+    const controls = [...scope.querySelectorAll("button, [role='button']")].filter(isVisible);
+    if (!controls.length) continue;
+
+    const labeled = controls.filter(button => {
+      const label = controlLabel(button);
+      return /\b(send|enviar|submit|mandar)\b/.test(label) &&
+        !isClearlyAuxiliaryControl(button);
+    });
+    if (labeled.length) return labeled.find(isEnabled) || labeled[0];
+
+    const submitControls = controls.filter(button => {
+      const type = String(button.getAttribute?.("type") || "").toLowerCase();
+      const testId = String(button.getAttribute?.("data-testid") || "").toLowerCase();
+      return type === "submit" || /submit|composer-send/.test(testId);
+    });
+    if (submitControls.length) return submitControls.find(isEnabled) || submitControls[0];
+
+    // Last-resort icon-only fallback: only consider a compact group of up to
+    // five controls in DOM order after the composer. Known voice, upload, tool,
+    // stop, and navigation controls are excluded; the final adjacent enabled
+    // control is the send action in the composer toolbar.
+    if (controls.length <= 5) {
+      const adjacent = controls.filter(button =>
+        isAfterComposerInput(input, button) && !isClearlyAuxiliaryControl(button)
+      );
+      if (adjacent.length) {
+        const enabled = adjacent.filter(isEnabled);
+        return enabled.length ? enabled[enabled.length - 1] : adjacent[adjacent.length - 1];
+      }
+    }
+  }
+
+  // Older layouts still expose the composer as a form.
+  const form = input?.closest?.("form");
+  if (form?.querySelectorAll) {
+    const buttons = [...form.querySelectorAll("button, [role='button']")].filter(isVisible);
+    const labeledSend = buttons.find(button => {
+      const label = controlLabel(button);
+      return /\b(send|enviar|submit|mandar)\b/.test(label) &&
+        !isClearlyAuxiliaryControl(button);
+    });
+    if (labeledSend) return labeledSend;
+
+    const submits = buttons.filter(button =>
+      String(button.getAttribute?.("type") || "").toLowerCase() === "submit"
+    );
+    if (submits.length) return submits.find(isEnabled) || submits[0];
+  }
+
+  return null;
+}
+
 function findEnabledSendButton(input) {
-  // Search each selector independently. A disabled match must not mask another
-  // enabled send button exposed under a different accessible label/DOM contract.
+  // Search known accessibility contracts first. A disabled match must not mask
+  // another enabled send button exposed under a different label/DOM contract.
   for (const selector of SEND_SELECTORS) {
     const nodes = document.querySelectorAll(selector);
     for (const node of nodes) {
@@ -167,27 +251,8 @@ function findEnabledSendButton(input) {
     }
   }
 
-  // Last resort: inspect the submit control scoped to the form containing the
-  // composer. Never click arbitrary page buttons outside the composer form.
-  const form = input?.closest?.("form");
-  if (form?.querySelectorAll) {
-    const buttons = [...form.querySelectorAll("button")].filter(isEnabled);
-    const labeledSend = buttons.find(button => {
-      const label = [
-        button.getAttribute("data-testid"),
-        button.getAttribute("aria-label"),
-        button.getAttribute("title"),
-        button.innerText,
-        button.textContent
-      ].filter(Boolean).join(" ").toLowerCase();
-      return /send|enviar|submit/.test(label);
-    });
-    if (labeledSend) return labeledSend;
-
-    const submits = [...form.querySelectorAll('button[type="submit"]')].filter(isEnabled);
-    if (submits.length === 1) return submits[0];
-  }
-
+  const scoped = findComposerScopedSendButton(input);
+  if (scoped && isEnabled(scoped)) return scoped;
   return null;
 }
 
@@ -207,6 +272,7 @@ async function waitForSendButton(timeoutMs, input, expectedText) {
       throw new Error("El texto no quedó correctamente insertado en el cuadro de ChatGPT");
     }
 
+    if (findComposerScopedSendButton(input)) sawVisibleCandidate = true;
     const button = findEnabledSendButton(input);
     if (button) return button;
     await new Promise(r => setTimeout(r, 200));

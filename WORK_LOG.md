@@ -287,3 +287,14 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Límite:** es una prueba automatizada del panel con DOM/Chrome API simulados en Node. La sesión del Chrome local aún no ha sido observada por esta herramienta; validación real `NOT_RUN`.
 - **Estado:** PR #6 sigue abierto y `main` intacto. No afirmar que el loop CEREBRO→OBRERO real ya funciona hasta probar el navegador.
 - **TIMER:** CI completada; quedan 5–10 min para sincronizar y recargar localmente, y 10–20 min para la prueba de Chrome real. Tiempo efectivo no medido.
+
+
+## 2026-10-11 — BRIDGE-015 · botón de envío de OBRERO sin selector accesible estable
+
+- **HEAD BEFORE:** `8c893eea50ee9e616a1ed13a7b97ff478f8ff496`. PR #6 abierto y sin merge; `main` permanece sin cambios.
+- **Reproducción manual informada:** CEREBRO recibió `escribe 2`, devolvió `2`, y BRIDGE verificó la respuesta y escribió `2` en el compositor de OBRERO. El envío no ocurrió; el log terminó en `ERROR — OBRERO — No se encontró un botón de envío reconocible en el compositor de ChatGPT`.
+- **Diagnóstico acotado:** los selectores conocidos y el fallback de formulario no cubren un control de envío que carezca de test-id/label estable y esté fuera de un `form`. No se afirma que este sea el único posible DOM real, pero concuerda con el error observado.
+- **Cambio:** búsqueda estructural limitada a ancestros del compositor. Prioriza controles con etiqueta de envío o semántica submit. Como último recurso solo admite un grupo compacto (hasta cinco botones visibles), un control situado después del compositor en el orden DOM y excluye acciones reconocibles de voz, adjuntar, herramientas, stop, menú, etc. El timeout ahora también sabe que existe un candidato estructural visible.
+- **Prueba de regresión:** pipeline integrado CEREBRO→OBRERO con dos iteraciones; el fixture de OBRERO oculta los selectores conocidos y presenta solo un botón icon-only sin etiqueta, test-id, tipo submit ni formulario. Se exige click, `TURN_COMPLETE` y finalización en dos iteraciones.
+- **CI del nuevo SHA:** pendiente. La prueba usa DOM simulado, no la sesión real de Chrome; E2E local requiere repetición manual.
+- **TIMER:** parche y regresión estimados 45–90 min; CI y ajuste 10–30 min; prueba manual local 10–20 min. Tiempo medido no disponible.

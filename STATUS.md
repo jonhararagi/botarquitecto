@@ -243,3 +243,12 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - La regresión de panel confirma que Iteraciones = `1` sobrevive al polling y se envía igual en `SAVE_SESSION` y `START_LOOP`.
 - La prueba real en Chrome/Brave sigue pendiente. PR #6 abierto; `main` no modificado.
 - **TIMER:** quedan sincronización local (5–10 min estimados) y prueba manual de Chrome (10–20 min estimados).
+
+
+## 2026-10-11 — BRIDGE-015 · detección estructural del envío
+
+- Corregida la detección como último recurso para un botón del compositor sin selectores de accesibilidad conocidos, incluso si el compositor no está dentro de un formulario.
+- Se añade una regresión integrada del ciclo CEREBRO→OBRERO con un control de envío icon-only en la pestaña OBRERO.
+- **CI del nuevo SHA:** pendiente; Chrome real requiere nueva repetición manual.
+- PR #6 sigue abierto; `main` no modificado.
+- **TIMER:** 45–90 min estimados de implementación; prueba manual 10–20 min tras CI.
