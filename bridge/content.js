@@ -778,6 +778,7 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, jobId = 
     diagnosticOutcome = "completed";
     return responseText;
   } catch (error) {
+    diagnosticOutcome = "error";
     diagnosticErrorCode = sendFailureCode(error);
     recordSendDiagnostic(diagnostic, "terminal_error", {
       code: diagnosticErrorCode,
