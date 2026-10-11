@@ -510,8 +510,9 @@ test("send failure emits bounded, content-free BRIDGE_SEND_DIAG evidence", async
   const report = content.messages.find(message => message.type === "TURN_COMPLETE");
   assert.ok(report);
   assert.equal(report.ok, false);
-  assert.ok(content.diagnostics.some(args => args[0] === "[BRIDGE_SEND_DIAG]"), "a diagnostic summary must be logged on failure");
-  const serialized = JSON.stringify(content.diagnostics);
+  const record = content.diagnostics.find(args => args[0] === "[BRIDGE_SEND_DIAG]");
+  assert.ok(record, "a diagnostic summary must be logged on failure");
+  const serialized = JSON.stringify(record);
   assert.ok(!serialized.includes("prompt sintético"), "diagnostic output must not contain message content");
   for (const field of ["jobId", "button", "composer", "candidates", "expectedLength"]) {
     assert.ok(serialized.includes(field), "diagnostic output must include " + field);
@@ -521,6 +522,10 @@ test("send failure emits bounded, content-free BRIDGE_SEND_DIAG evidence", async
   }
   assert.ok(!serialized.includes("respuesta integrada"), "diagnostic output must not contain assistant response text");
   assert.ok(serialized.length < 12000, "diagnostic output must remain bounded");
+  const payload = JSON.parse(record[1]);
+  assert.equal(payload.outcome, "error", "terminal send failure must be labeled as an error");
+  assert.equal(payload.errorCode, "submission_unconfirmed");
+  assert.ok(payload.events.some(event => event.stage === "terminal_error"));
 });
 
 test("a transient Stop insertion is positive evidence of submission even if the composer remains populated", async () => {
