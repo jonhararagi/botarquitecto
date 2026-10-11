@@ -268,3 +268,11 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - Cubierto en integración: envío desde CEREBRO y detección estructural del control icon-only en OBRERO.
 - Chrome real pendiente; PR #6 abierto, `main` intacta.
 - **TIMER:** quedan sincronización local 5–10 min y validación manual 10–20 min estimados.
+
+## 2026-10-11 — BRIDGE-016 · envío verificado
+
+- Código probado: `9e681c1695933b94b4a41c98f17204319260f909`; [CI run 38131121319](https://github.com/jonhararagi/botarquitecto/actions/runs/38131121319) = `success`.
+- Verifica el efecto del click; si el mensaje sigue en el compositor, intenta una sola vez la vía de formulario/Enter y devuelve error explícito si no se confirma.
+- El fixture de integración cubre el fallback; Chrome real sigue pendiente.
+- PR #6 abierto; `main` intacta.
+- **TIMER:** quedan 5–10 min de sincronización y 10–20 min de prueba manual estimados.
