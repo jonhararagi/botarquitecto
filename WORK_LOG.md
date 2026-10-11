@@ -327,3 +327,37 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Límite de evidencia:** CI simula DOM/APIs; no prueba que el evento sintético Enter sea aceptado por la versión real de ChatGPT. Hace falta prueba manual en Chrome.
 - **PR #6:** abierto, sin merge; `main` permanece intacta.
 - **TIMER:** código y CI terminados; sincronización local 5–10 min y prueba manual 10–20 min estimados.
+
+## 2026-10-11 — BRIDGE-010 · informe de auditoría y carga progresiva
+
+### Estado de entrada
+- HEAD remoto: `973143ad433f0753a9bf25a8c0e212dde47d787a`; `main`: `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- PR #6 abierto y no fusionado. El manifiesto se conserva Manifest V3; no se añadieron permisos, dependencias ni servicios externos.
+
+### Hallazgos confirmados y correcciones
+1. **Envío ambiguo, `bridge/content.js`, `sendAndWait()`.** Reproducción: el click deja el texto en el compositor y no hay confirmación observada a tiempo. El código antiguo lanzaba `requestSubmit()`/Enter; el test observó un segundo intento. **Corregido:** solo un click; si la entrega no puede confirmarse inequívocamente, termina con error y no reenvía.
+2. **Stop inexistente/cambiado, `bridge/content.js`, detección de generación.** La regresión mostró que una respuesta parcial se reportaba como éxito al no coincidir con los selectores preferidos. **Corregido:** fallback semántico para controles visibles y finalización solo después de observar positivamente actividad de generación y su posterior desaparición.
+3. **`START_TURN` duplicado, `bridge/content.js`, listener de mensajes.** El test ejecutó el mismo `jobId` dos veces y observó dos clicks. **Corregido:** mismo job activo responde como duplicado sin iniciar ejecución paralela; se bloquea el replay de los últimos 256 IDs terminales durante la vida del content script.
+4. **Normalización**, `normalizeComposerText()`: se mantiene `replace(/\\s+/g, " ")` y el test estático impide que derive a `/\\\\s+/g`.
+
+### Tabla de carga automatizada
+| Carga | Iteraciones esperadas | Completadas | Duplicados aceptados | Errores en ruta feliz | Resultado |
+|---|---:|---:|---:|---:|---|
+| Nivel 1 | 1 | 1 | 0 | 0 | `PASS_AUTOMATED` |
+| Nivel 2 | 3 | 3 | 0 | 0 | `PASS_AUTOMATED` |
+| Nivel 3 | 5 | 5 | 0 | 0 | `PASS_AUTOMATED` |
+| Nivel 4 | 10 | 10 | 0 | 0 | `PASS_AUTOMATED` |
+| Nivel 5 | 2 sesiones × 3 turnos | 6 en total | 0 | 0 | `PASS_AUTOMATED` |
+
+- En cada una de las 19 iteraciones de niveles 1/3/5/10 se inyectó una finalización duplicada y fue rechazada; contadores, log y estado persistido coincidieron. En concurrencia se usaron cuatro pestañas distintas; cada sesión conservó su contador/rol/log y generó tres despachos. Estas cifras corresponden al harness Node VM, no a conversaciones reales de ChatGPT.
+- El primer CI de regresiones [run 38135816848](https://github.com/jonhararagi/botarquitecto/actions/runs/38135816848) pasó sintaxis, contratos, worker dinámico, timeout y panel, y falló la integración en los dos defectos iniciales. El siguiente CI [run 38135880725](https://github.com/jonhararagi/botarquitecto/actions/runs/38135880725) confirmó además el defecto de doble `START_TURN` (dos clicks frente a uno esperado).
+- **SHA con correcciones de código:** `df03797b8f81e86adf81d78a9deeaff8a2e3f15d`.
+- **CI final para ese SHA:** push [38136129721](https://github.com/jonhararagi/botarquitecto/actions/runs/38136129721) y pull request [38136133081](https://github.com/jonhararagi/botarquitecto/actions/runs/38136133081), ambos `success`.
+
+### Riesgos y pruebas pendientes
+- `NOT_RUN`: navegador Chrome/Brave real, selectores/DOM de ChatGPT en vivo, cargas reales 1/3/5/10, STOP observado en ejecución real, recuperación tras suspensión natural MV3, recarga de extensión, cierre de pestaña y reinicio del navegador.
+- El STOP del worker invalida el job e impide despachos posteriores en las pruebas simuladas; el content script todavía no recibe cancelación cooperativa para abandonar el polling ya iniciado. Es una limitación pendiente, no una prueba real.
+- El comportamiento seguro puede terminar con ERROR si no logra demostrar que el mensaje fue enviado o que la generación terminó; es preferible a reenviar algo potencialmente duplicado.
+- PR #6 permanece abierto; no hubo merge y `main` sigue en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- **Siguiente tarea única:** validación manual supervisada en Chrome/Brave con `docs/qa/BRIDGE-010-PROGRESSIVE-LOAD-MANUAL.md`.
+- **TIMER:** tiempo efectivo no medido; auditoría/tests/correcciones estimados en 2–4 h y navegador real 1–2 h adicionales. Estabilización global provisional 3–7 días.

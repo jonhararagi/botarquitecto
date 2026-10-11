@@ -198,3 +198,19 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - **GitHub Actions:** [run 38056070845](https://github.com/jonhararagi/botarquitecto/actions/runs/38056070845), conclusión `success` sobre ese SHA exacto.
 - Pasaron sintaxis JavaScript, contratos estáticos, pruebas dinámicas del service worker, timeout del content script y test integrado content script + service worker.
 - No se ejecutaron comandos Node localmente mediante esta sesión. La validación Chrome/Brave real sigue `NOT RUN`; no declarar producción lista.
+
+
+## BRIDGE-010 — estado tras pruebas de carga automatizadas
+
+- [x] Verificar SHA remoto inicial `973143ad433f0753a9bf25a8c0e212dde47d787a`, `main`, PR #6, workflow y código clave.
+- [x] Añadir cargas deterministas de 1/3/5/10 turnos y dos sesiones concurrentes; las pruebas del worker/persistencia pasaron en CI antes de corregir los defectos de integración.
+- [x] Reproducir tres defectos de content script con regresiones: reintento del envío ambiguo, falso positivo de Stop ausente/cambiado y doble ejecución del mismo `START_TURN`.
+- [x] Corregir el envío ambiguo de forma conservadora, reforzar la confirmación de generación e impedir que el mismo trabajo se ejecute dos veces.
+- [x] Mantener `/\\s+/g` y su regresión estática.
+- [x] Verificar CI verde en el SHA de código `df03797b8f81e86adf81d78a9deeaff8a2e3f15d`: [push 38136129721](https://github.com/jonhararagi/botarquitecto/actions/runs/38136129721), [PR 38136133081](https://github.com/jonhararagi/botarquitecto/actions/runs/38136133081).
+- [ ] Repetir 1 → 3 → 5 → 10 con la extensión cargada en Chrome/Brave real.
+- [ ] Observar STOP durante un turno y comprobar que no empieza otro; registrar por separado recarga de extensión, cierre de pestaña y recuperación MV3.
+- [ ] No marcar `PASS_REAL` ni producción lista sin evidencia directa del navegador.
+- **Estado:** `PARTIAL`. `PASS_AUTOMATED` para las suites CI citadas; E2E real `NOT_RUN`.
+- **Siguiente tarea única:** validación manual supervisada conforme a `docs/qa/BRIDGE-010-PROGRESSIVE-LOAD-MANUAL.md`.
+- **TIMER:** trabajo técnico estimado 2–4 h, más 1–2 h para navegador real; tiempo efectivo no medido. Estabilización global 3–7 días provisional.

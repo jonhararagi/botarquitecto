@@ -276,3 +276,21 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - El fixture de integración cubre el fallback; Chrome real sigue pendiente.
 - PR #6 abierto; `main` intacta.
 - **TIMER:** quedan 5–10 min de sincronización y 10–20 min de prueba manual estimados.
+
+## 2026-10-11 — BRIDGE-010 · envío conservador, identidad de turnos y carga progresiva
+
+- **HEAD de código corregido:** `df03797b8f81e86adf81d78a9deeaff8a2e3f15d`.
+- **CI automatizada en el SHA exacto:** [run 38136129721 (push)](https://github.com/jonhararagi/botarquitecto/actions/runs/38136129721) y [run 38136133081 (pull request)](https://github.com/jonhararagi/botarquitecto/actions/runs/38136133081), ambas `success`. Todos los pasos del workflow pasaron en ese SHA.
+- **Defectos reproducidos antes de corregir (tests automatizados, no navegador):**
+  1. `sendAndWait()`: un click sin confirmación inmediata activaba un segundo envío con `requestSubmit()` o Enter. La regresión observó un intento de fallback donde se esperaba cero. Riesgo: duplicar el prompt si el primer click sí se aceptó, pero la UI tardó en reflejarlo.
+  2. Detección de Stop: la desaparición/no coincidencia de los selectores conocidos se interpretaba como generación detenida. La prueba con un control Stop visible y un contrato cambiado llegó a aceptar una respuesta parcial (`report.ok === true`).
+  3. `START_TURN`: recibir dos veces el mismo `jobId` mientras estaba activo inició dos ejecuciones; la prueba observó dos clicks en vez de uno.
+- **Corrección mínima en `bridge/content.js`:** no se reintenta un envío ambiguo; se emite un error terminal explícito. La detección de Stop usa fallback semántico y requiere evidencia positiva de generación activa antes de aceptar su finalización. Los inicios duplicados con mismo `jobId` son idempotentes y se recuerdan hasta 256 IDs terminados dentro de la vida del content script.
+- **Regresión de normalización:** se conserva `replace(/\\s+/g, " ")`; el contrato estático detecta una sustitución incorrecta por `/\\\\s+/g`.
+- **Carga simulada en Node VM:** niveles 1, 3, 5 y 10 completaron exactamente 1/3/5/10 turnos, respectivamente; total 19 turnos. Cada resultado aceptado recibió un `TURN_COMPLETE` duplicado inyectado y rechazado, sin despacho extra. Una prueba adicional terminó 3 turnos en cada una de 2 sesiones concurrentes con 4 pestañas distintas: 6 despachos totales, contadores/logs/storage aislados. Las pruebas del worker para estos niveles pasaron en [run 38135816848](https://github.com/jonhararagi/botarquitecto/actions/runs/38135816848), aunque la integración de ese SHA detectó los defectos anteriores.
+- **Validación final automatizada:** los runs [38136129721](https://github.com/jonhararagi/botarquitecto/actions/runs/38136129721) y [38136133081](https://github.com/jonhararagi/botarquitecto/actions/runs/38136133081) terminaron `success` sobre el SHA de código `df03797b8f81e86adf81d78a9deeaff8a2e3f15d`. Esto no equivale a navegador real.
+- **Chrome/Brave real:** `NOT_RUN`. No afirmar compatibilidad E2E, suspensión natural MV3 o STOP en pestaña real con base en Node VM.
+- **Riesgo STOP pendiente:** el worker invalida el job y bloquea despachos posteriores; el content script no tiene cancelación cooperativa del polling/generación ya iniciados. La respuesta tardía debe ser rechazada por el worker; falta comprobarlo en Chromium real.
+- **Gobernanza:** PR #6 continúa abierto; `main` permanece en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- **Siguiente paso único:** validación manual supervisada por niveles con Chrome/Brave real según `docs/qa/BRIDGE-010-PROGRESSIVE-LOAD-MANUAL.md`.
+- **TIMER:** tiempo efectivo no medido. Auditoría/tests/correcciones estimados en 2–4 h y navegador real 1–2 h adicionales; estabilización global 3–7 días provisional.
