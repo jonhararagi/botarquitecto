@@ -46,6 +46,7 @@ test("content script rejects overlapping jobs and waits for a stable new respons
   assert.match(content, /current !== beforeText/);
   assert.match(content, /Date\.now\(\) - stableSince >= RESPONSE_STABLE_MS/);
   assert.match(content, /function responseTextFromSourceTurn\(/);
+  assert.match(content, /return String\(text \|\| ""\)\.replace\(\/\\s\+\/g, " "\)\.trim\(\);/, "composer whitespace normalization must use the whitespace character class");
   assert.match(content, /function findEnabledSendButton\(input\)/);
   assert.match(content, /function findComposerScopedSendButton/);
   assert.match(content, /isAfterComposerInput/);
