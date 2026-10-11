@@ -39,7 +39,7 @@ const ticks = async (count = 20) => {
   for (let i = 0; i < count; i++) await Promise.resolve();
 };
 
-test("periodic polling cannot overwrite edited settings and START_LOOP receives the persisted values", async () => {
+test("periodic polling preserves edited settings and distinct CEREBRO/OBRERO tab selections", async () => {
   const source = await readFile(CONTROL_PATH, "utf8");
   const ids = [
     "session", "sessionName", "brain", "worker", "seed", "iterations", "brainTimeout",
@@ -105,6 +105,10 @@ test("periodic polling cannot overwrite edited settings and START_LOOP receives 
   assert.ok(pollCallback, "the control panel should start its state poll");
   assert.equal(elements.iterations.value, 10);
 
+  elements.brain.value = "22";
+  elements.brain.onchange();
+  elements.worker.value = "11";
+  elements.worker.onchange();
   elements.sessionName.value = "Manual test";
   elements.sessionName.dispatch("input");
   elements.iterations.value = "2";
@@ -117,6 +121,9 @@ test("periodic polling cannot overwrite edited settings and START_LOOP receives 
   elements.minTurnDelay.dispatch("input");
   document.activeElement = elements.start;
   await pollCallback();
+  assert.equal(elements.brain.value, "22", "poll must preserve the selected CEREBRO tab instead of restoring its saved tab");
+  assert.equal(elements.worker.value, "11", "poll must preserve the selected OBRERO tab instead of restoring its saved tab");
+  assert.notEqual(elements.brain.value, elements.worker.value, "the chosen roles must remain distinct across polling");
   assert.equal(elements.sessionName.value, "Manual test", "poll must not replace edited session name");
   assert.equal(elements.iterations.value, "2", "poll must not replace edited iteration limit 2 with 10");
   assert.equal(elements.brainTimeout.value, "45", "poll must not replace edited CEREBRO timeout 45 with saved 60");
@@ -126,15 +133,23 @@ test("periodic polling cannot overwrite edited settings and START_LOOP receives 
   elements.seed.value = "synthetic seed";
   await elements.start.onclick();
   assert.equal(savedSettings.name, "Manual test");
+  assert.equal(savedSettings.brainTabId, 22, "SAVE_SESSION must persist the chosen CEREBRO tab");
+  assert.equal(savedSettings.workerTabId, 11, "SAVE_SESSION must persist the chosen OBRERO tab");
+  assert.notEqual(savedSettings.brainTabId, savedSettings.workerTabId);
   assert.equal(savedSettings.maxIterations, 2, "SAVE_SESSION must persist the edited iteration limit");
   assert.equal(savedSettings.brainTimeoutMs, 45000, "SAVE_SESSION must persist CEREBRO timeout in ms");
   assert.equal(savedSettings.workerTimeoutMs, 60000, "SAVE_SESSION must persist OBRERO timeout in ms");
   assert.equal(savedSettings.minTurnDelayMs, 3000, "SAVE_SESSION must persist minimum delay in ms");
+  assert.equal(startedSettings.brainTabId, 22, "START_LOOP must send CEREBRO to the selected tab");
+  assert.equal(startedSettings.workerTabId, 11, "START_LOOP must send OBRERO to the selected tab");
+  assert.notEqual(startedSettings.brainTabId, startedSettings.workerTabId);
   assert.equal(startedSettings.maxIterations, 2, "START_LOOP must receive the same iteration limit");
   assert.equal(startedSettings.brainTimeoutMs, 45000, "START_LOOP must receive saved CEREBRO timeout");
   assert.equal(startedSettings.workerTimeoutMs, 60000, "START_LOOP must receive saved OBRERO timeout rather than 600000");
   assert.equal(startedSettings.minTurnDelayMs, 3000, "START_LOOP must receive saved minimum delay");
   assert.equal(session.name, "Manual test");
+  assert.equal(session.brainTabId, 22);
+  assert.equal(session.workerTabId, 11);
   assert.equal(session.maxIterations, 2);
   assert.equal(session.brainTimeoutMs, 45000);
   assert.equal(session.workerTimeoutMs, 60000);

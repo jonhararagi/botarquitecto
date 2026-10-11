@@ -75,8 +75,13 @@ test("manifest remains MV3 with only the intended ChatGPT hosts", async () => {
   assert.ok(!manifest.permissions.includes("nativeMessaging"));
 });
 
-test("control panel preserves all edited settings until save", async () => {
+test("control panel preserves all edited settings and tab selections until save", async () => {
   const control = await controlPromise;
+  assert.match(control, /brainSelectionDirty=false,workerSelectionDirty=false/);
+  assert.match(control, /fillTabs\(brain,brainSelectionDirty\?selectedBrainTabId:x\.brainTabId\)/);
+  assert.match(control, /fillTabs\(worker,workerSelectionDirty\?selectedWorkerTabId:x\.workerTabId\)/);
+  assert.match(control, /brain\.onchange=\(\)=>\{selectedBrainTabId=Number\(brain\.value\)\|\|null;brainSelectionDirty=true\}/);
+  assert.match(control, /worker\.onchange=\(\)=>\{selectedWorkerTabId=Number\(worker\.value\)\|\|null;workerSelectionDirty=true\}/);
   assert.match(control, /iterationsDirty=false/);
   assert.match(control, /if\(!iterationsDirty&&document\.activeElement!==iterations\)iterations\.value=x\.maxIterations\|\|10/);
   assert.match(control, /iterations\.addEventListener\("input",\(\)=>\{iterationsDirty=true\}\)/);
