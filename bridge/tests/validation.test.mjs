@@ -42,7 +42,13 @@ test("TURN_COMPLETE validates session, active job, role, sender tab, and accepta
 
 test("content script rejects overlapping jobs and waits for a stable new response", async () => {
   const content = await contentPromise;
-  assert.match(content, /if \(activeJobId && activeJobId !== message\.jobId\)/);
+  assert.match(content, /const terminalJobIds = new Set\(\)/);
+  assert.match(content, /terminalJobIds\.has\(incomingJobId\)/);
+  assert.match(content, /activeJobId === incomingJobId/);
+  assert.doesNotMatch(content, /retryComposerSubmission/, "an ambiguous click must not trigger an automatic second send");
+  assert.match(content, /no se reintentó para evitar duplicar el mensaje/);
+  assert.match(content, /function findVisibleStopControl\(/);
+  assert.match(content, /const generationStopped = generationObserved && !stopControl/);
   assert.match(content, /current !== beforeText/);
   assert.match(content, /Date\.now\(\) - stableSince >= RESPONSE_STABLE_MS/);
   assert.match(content, /function responseTextFromSourceTurn\(/);

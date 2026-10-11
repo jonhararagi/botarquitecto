@@ -26,6 +26,13 @@ const STOP_SELECTORS = [
 const BRIDGE_DONE_MARKER = "[[BRIDGE_DONE]]";
 const RESPONSE_STABLE_MS = 2000;
 let activeJobId = null;
+let generationObserved = false;
+const terminalJobIds = new Set();
+
+function rememberTerminalJobId(jobId) {
+  terminalJobIds.add(jobId);
+  if (terminalJobIds.size > 256) terminalJobIds.delete(terminalJobIds.values().next().value);
+}
 
 function isVisible(node) {
   if (!node) return false;
@@ -290,8 +297,21 @@ function stripBridgeMarker(text) {
   return index === -1 ? value : value.slice(0, index).trim();
 }
 
-function isGenerationStopped() {
-  return !firstVisible(STOP_SELECTORS);
+function findVisibleStopControl() {
+  const selected = firstVisible(STOP_SELECTORS);
+  if (selected) {
+    generationObserved = true;
+    return selected;
+  }
+
+  // DOM/test-id contracts change; inspect visible controls for Stop semantics
+  // when the preferred selectors no longer match.
+  const fallback = [...document.querySelectorAll("button, [role='button']")].find(node => {
+    if (!isVisible(node)) return false;
+    return /\b(stop|detener|cancel generation|cancelar generación|stop generating|detener respuesta)\b/.test(controlLabel(node));
+  }) || null;
+  if (fallback) generationObserved = true;
+  return fallback;
 }
 
 async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
@@ -317,7 +337,8 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
       }
 
       const stable = stableSince && Date.now() - stableSince >= RESPONSE_STABLE_MS;
-      const generationStopped = isGenerationStopped();
+      const stopControl = findVisibleStopControl();
+      const generationStopped = generationObserved && !stopControl;
       const minimumDelayReached = Date.now() - sentAt >= minTurnDelayMs;
 
       if (stable && generationStopped && minimumDelayReached) {
@@ -343,26 +364,13 @@ async function waitForComposerSubmission(input, beforeNode, beforeText, expected
     const latestText = getAssistantText(latestNode);
     const responseChanged = Boolean(latestNode && latestText &&
       (latestNode !== beforeNode || latestText !== beforeText));
-    if (composerText !== normalizeComposerText(expectedText) || responseChanged || !isGenerationStopped()) {
+    const stopControl = findVisibleStopControl();
+    if (composerText !== normalizeComposerText(expectedText) || responseChanged || stopControl) {
       return true;
     }
     await new Promise(resolve => setTimeout(resolve, 150));
   }
   return false;
-}
-
-function retryComposerSubmission(input) {
-  const form = input?.closest?.("form");
-  if (form && typeof form.requestSubmit === "function") {
-    form.requestSubmit();
-    return;
-  }
-  for (const type of ["keydown", "keypress", "keyup"]) {
-    input.dispatchEvent(new KeyboardEvent(type, {
-      key: "Enter", code: "Enter", keyCode: 13, which: 13,
-      bubbles: true, cancelable: true
-    }));
-  }
 }
 
 async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
@@ -373,22 +381,19 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
   insertText(input, text);
 
   const button = await waitForSendButton(10000, input, text);
+  generationObserved = false;
+  const sentAt = Date.now();
   button.click();
 
-  let submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text);
-  if (!submitted && normalizeComposerText(readComposerText(input)) === normalizeComposerText(text)) {
-    retryComposerSubmission(input);
-    submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text, 2500);
-  }
-
+  const submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text);
   if (!submitted) {
-    throw new Error("ChatGPT no confirmó el envío: el mensaje sigue en el compositor y no comenzó una respuesta nueva");
+    throw new Error("ChatGPT no confirmó el envío de forma inequívoca; no se reintentó para evitar duplicar el mensaje");
   }
 
   return waitForCompletedResponse(
     beforeNode,
     beforeText,
-    Date.now(),
+    sentAt,
     timeoutMs,
     minTurnDelayMs
   );
@@ -415,19 +420,39 @@ async function runTurn(message) {
   } catch (deliveryError) {
     console.error("BRIDGE no pudo entregar TURN_COMPLETE al worker", deliveryError?.message || String(deliveryError));
   } finally {
-    if (activeJobId === message.jobId) activeJobId = null;
+    if (activeJobId === message.jobId) {
+      activeJobId = null;
+      rememberTerminalJobId(message.jobId);
+    }
   }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "START_TURN") {
-    if (activeJobId && activeJobId !== message.jobId) {
-      sendResponse({ ok: false, error: "Esta pestaña ya está ejecutando otro turno" });
+    const incomingJobId = typeof message.jobId === "string" ? message.jobId.trim() : "";
+    if (!incomingJobId || typeof message.sessionId !== "string" || !message.sessionId.trim() ||
+        !["CEREBRO", "OBRERO"].includes(message.role)) {
+      sendResponse({ ok: false, error: "START_TURN mal formado: identidad de sesión, trabajo o rol inválida" });
       return;
     }
 
-    activeJobId = String(message.jobId || "");
-    runTurn({ ...message, role: message.role || "ChatGPT" });
+    if (activeJobId) {
+      if (activeJobId === incomingJobId) {
+        sendResponse({ ok: true, started: false, duplicate: true });
+      } else {
+        sendResponse({ ok: false, error: "Esta pestaña ya está ejecutando otro turno" });
+      }
+      return;
+    }
+
+    if (terminalJobIds.has(incomingJobId)) {
+      sendResponse({ ok: true, started: false, duplicate: true });
+      return;
+    }
+
+    activeJobId = incomingJobId;
+    generationObserved = false;
+    runTurn({ ...message, jobId: incomingJobId, role: message.role });
     sendResponse({ ok: true, started: true });
     return;
   }

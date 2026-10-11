@@ -54,6 +54,8 @@ async function harness(mode = "success", options = {}) {
     const ambiguousClick = options.ambiguousClick === true && tabId === 11;
     const unrecognizedStopActive = options.unrecognizedStopActive === true && tabId === 11;
     const sendAttempts = { click: 0, keyboard: 0 };
+    let stopVisible = false;
+    let stopVisibilityChecks = 0;
     let localizedSendButton;
     let structuralSendButton;
     const composerToolbar = {
@@ -100,7 +102,7 @@ async function harness(mode = "success", options = {}) {
     const sendButton = {
       disabled: true,
       getAttribute(name) { return name === "data-testid" ? "send-button" : null; },
-      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; stopVisible = true; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     localizedSendButton = {
       disabled: true,
@@ -109,14 +111,14 @@ async function harness(mode = "success", options = {}) {
         if (name === "type") return "submit";
         return null;
       },
-      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; stopVisible = true; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     structuralSendButton = {
       disabled: true,
       // Simulates an icon-only send control with no accessible label, test-id,
       // submit type, or wrapping form.
       getAttribute() { return null; },
-      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; stopVisible = true; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     const document = {
       querySelectorAll(selector) {
@@ -125,7 +127,7 @@ async function harness(mode = "success", options = {}) {
         if (selector === 'button[data-testid="send-button"]' || selector === 'button[data-testid*="send" i]') return useStructuralSendButton ? [] : [sendButton];
         if (selector === 'button[aria-label*="enviar" i]') return useStructuralSendButton ? [] : [localizedSendButton];
         if (selector === '[data-message-author-role="assistant"]' || selector === "article") return assistant;
-        if (selector === "button, [role='button']" && unrecognizedStopActive) return [stopMarker];
+        if (selector === "button, [role='button']" && (stopVisible || unrecognizedStopActive)) return [stopMarker];
         if (selector.includes("stop-button") || selector.includes("Stop") || selector.includes("Detener")) return [];
         return [];
       },
@@ -146,7 +148,14 @@ async function harness(mode = "success", options = {}) {
       Promise, console, queueMicrotask,
       InputEvent: class { constructor(type) { this.type = type; } }, Event: class { constructor(type) { this.type = type; } }, KeyboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
       HTMLInputElement: class {}, HTMLTextAreaElement: class {},
-      getComputedStyle: () => ({ display: "block", visibility: "visible" })
+      getComputedStyle: node => {
+        if (node === stopMarker) {
+          stopVisibilityChecks++;
+          const visible = unrecognizedStopActive || (stopVisible && stopVisibilityChecks <= 1);
+          return { display: visible ? "block" : "none", visibility: "visible" };
+        }
+        return { display: "block", visibility: "visible" };
+      }
     });
     vm.runInContext(contentSource, context, { filename: "bridge/content.js" });
     const result = { listener: (m, s, respond) => runtimeListeners.message(m, s, respond), messages: [], attempts: sendAttempts };
