@@ -307,3 +307,12 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 
 
 - **Segundo checkpoint CI:** [run 38129469661](https://github.com/jonhararagi/botarquitecto/actions/runs/38129469661) pasó sintaxis y los contratos estáticos, pero la integración falló porque el fixture usaba la misma respuesta para CEREBRO y OBRERO. El worker rechazó ese resultado repetido conforme a la protección de duplicados, así que el test no llegó a comprobar el límite 2. Se cambia la respuesta simulada de OBRERO por una distinta y se vuelve a ejecutar CI; no se interpreta este fallo de fixture como defecto productivo del envío.
+
+
+### BRIDGE-015 — CI final aprobada
+
+- Código y prueba integrada verificados en SHA `419f890468d4adcdb69ef0b0f6be11b66e1ad80b`.
+- [GitHub Actions run 38129530337](https://github.com/jonhararagi/botarquitecto/actions/runs/38129530337) concluyó `success` sobre ese SHA exacto.
+- La nueva regresión cubre el ciclo CEREBRO→OBRERO cuando el segundo compositor muestra un botón icon-only sin test-id, etiqueta accesible, tipo submit ni formulario.
+- La suite es DOM simulado bajo Node; queda pendiente repetir el caso en Chrome real. PR #6 sigue abierto y `main` no cambia.
+- **TIMER:** código/CI terminados; quedan 5–10 min de sincronización y 10–20 min de prueba manual, estimados.

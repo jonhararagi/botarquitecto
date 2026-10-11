@@ -260,3 +260,11 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 
 
 - Segundo checkpoint: la prueba integrada detectó correctamente que el fixture repetía el texto de CEREBRO y OBRERO, activando la defensa contra respuesta duplicada. Se hace distinta la respuesta de OBRERO para aislar el comportamiento de envío; CI nueva pendiente.
+
+
+### BRIDGE-015 — CI aprobada
+
+- [Run 38129530337](https://github.com/jonhararagi/botarquitecto/actions/runs/38129530337) = `success` en SHA `419f890468d4adcdb69ef0b0f6be11b66e1ad80b`.
+- Cubierto en integración: envío desde CEREBRO y detección estructural del control icon-only en OBRERO.
+- Chrome real pendiente; PR #6 abierto, `main` intacta.
+- **TIMER:** quedan sincronización local 5–10 min y validación manual 10–20 min estimados.
