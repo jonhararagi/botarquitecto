@@ -513,9 +513,14 @@ test("send failure emits bounded, content-free BRIDGE_SEND_DIAG evidence", async
   assert.ok(content.diagnostics.some(args => args[0] === "[BRIDGE_SEND_DIAG]"), "a diagnostic summary must be logged on failure");
   const serialized = JSON.stringify(content.diagnostics);
   assert.ok(!serialized.includes("prompt sintético"), "diagnostic output must not contain message content");
-  assert.ok(serialized.includes("jobId"));
-  assert.ok(serialized.includes("button"));
-  assert.ok(serialized.includes("composer"));
+  for (const field of ["jobId", "button", "composer", "candidates", "expectedLength"]) {
+    assert.ok(serialized.includes(field), "diagnostic output must include " + field);
+  }
+  for (const stage of ["after_insert", "send_button_located", "pre_click_state", "before_click", "after_click", "submission_unconfirmed"]) {
+    assert.ok(serialized.includes(stage), "diagnostic output must include stage " + stage);
+  }
+  assert.ok(!serialized.includes("respuesta integrada"), "diagnostic output must not contain assistant response text");
+  assert.ok(serialized.length < 12000, "diagnostic output must remain bounded");
 });
 
 test("a transient Stop insertion is positive evidence of submission even if the composer remains populated", async () => {
