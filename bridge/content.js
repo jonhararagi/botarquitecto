@@ -707,7 +707,16 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, jobId = 
       throw new Error("No se pudo verificar un compositor activo conectado al DOM; no se envió");
     }
     if (normalizeComposerText(readComposerText(activeInput)) !== normalizeComposerText(text)) {
+      recordSendDiagnostic(diagnostic, "active_composer_text_mismatch_before_click", {
+        composer: describeComposer(activeInput, text, originalInput)
+      });
       throw new Error("El compositor activo ya no contiene el mensaje esperado; no se envió");
+    }
+    if (activeInput !== originalInput) {
+      recordSendDiagnostic(diagnostic, "composer_replaced_before_click", {
+        original: describeComposer(originalInput, text, originalInput),
+        active: describeComposer(activeInput, text, originalInput)
+      });
     }
     input = activeInput;
 
