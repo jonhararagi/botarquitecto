@@ -57,13 +57,19 @@ async function harness(mode = "success", options = {}) {
     const preserveComposer = options.preserveComposer === true && tabId === 11;
     const noAssistantResponse = options.noAssistantResponse === true && tabId === 11;
     const replaceComposerOnClick = options.replaceComposerOnClick === true && tabId === 11;
+    const globalSendDecoy = options.globalSendDecoy === true && tabId === 11;
+    const unsyncedInsertion = options.unsyncedInsertion === true && tabId === 11;
+    const replaceButtonAfterSelection = options.replaceButtonAfterSelection === true && tabId === 11;
     const mutationObservers = [];
     class MockMutationObserver {
       constructor(callback) { this.callback = callback; this.active = false; mutationObservers.push(this); }
       observe(target) { this.target = target; this.active = true; }
       disconnect() { this.active = false; }
     }
-    const sendAttempts = { click: 0, keyboard: 0 };
+    const sendAttempts = { click: 0, keyboard: 0, decoyClick: 0, staleClick: 0, clickedButton: null };
+    const diagnosticLogs = [];
+    let buttonSwapActivated = false;
+    let buttonSwapScheduled = false;
     let stopVisible = false;
     let stopVisibilityChecks = 0;
     let localizedSendButton;
@@ -73,7 +79,7 @@ async function harness(mode = "success", options = {}) {
       querySelectorAll(selector) {
         if (selector !== "button, [role='button']") return [];
         const controls = [];
-        if (structuralSendButton) controls.push(structuralSendButton);
+        if (structuralSendButton) controls.push(buttonSwapActivated ? freshLocalButton : structuralSendButton);
         if (unrecognizedStopActive) controls.push(stopMarker);
         return controls;
       }
@@ -89,7 +95,7 @@ async function harness(mode = "success", options = {}) {
       dispatchEvent(event) {
         if (event.type === "keydown" && event.key === "Enter" && ambiguousClick) sendAttempts.keyboard++;
         if (event.type === "keydown" && event.key === "Enter" && useKeyboardFallback) { this.textContent = ""; assistant.push(node); }
-        if (event.type === "input" && this.textContent) {
+        if (event.type === "input" && this.textContent && !unsyncedInsertion) {
           if (localizedSendButton) localizedSendButton.disabled = false;
           if (structuralSendButton) structuralSendButton.disabled = false;
         }
@@ -111,8 +117,9 @@ async function harness(mode = "success", options = {}) {
       getAttribute(name) { return name === "data-testid" ? "stop-generating" : null; },
       innerText: "", textContent: ""
     };
-    function clickSend() {
+    function clickSend(source = "global") {
       sendAttempts.click++;
+      sendAttempts.clickedButton = source;
       if (mode === "error") throw new Error("DOM integrado controlado");
       if (ambiguousClick) return;
       if (replaceComposerOnClick) {
@@ -163,14 +170,38 @@ async function harness(mode = "success", options = {}) {
       // Simulates an icon-only send control with no accessible label, test-id,
       // submit type, or wrapping form.
       getAttribute() { return null; },
-      click: clickSend
+      get isConnected() { return !buttonSwapActivated; },
+      click() {
+        if (buttonSwapActivated) { sendAttempts.staleClick++; return; }
+        clickSend("scoped-old");
+      }
+    };
+    const freshLocalButton = {
+      disabled: false,
+      get isConnected() { return buttonSwapActivated; },
+      getAttribute(name) { return name === "data-testid" ? "send-button" : null; },
+      click() { clickSend("scoped-fresh"); }
+    };
+    const globalDecoyButton = {
+      disabled: false,
+      get isConnected() { return !buttonSwapActivated; },
+      getAttribute(name) {
+        if (name === "data-testid") return "send-button";
+        if (name === "aria-label") return "Send prompt";
+        return null;
+      },
+      click() { sendAttempts.decoyClick++; }
     };
     const document = {
       documentElement: {},
+      get activeElement() { return input; },
       querySelectorAll(selector) {
         if (selector === "#prompt-textarea" || selector === 'textarea[name="prompt-textarea"]' ||
             selector === 'div[contenteditable="true"][role="textbox"]') return [input];
-        if (selector === 'button[data-testid="send-button"]' || selector === 'button[data-testid*="send" i]') return useStructuralSendButton ? [] : [sendButton];
+        if (selector === 'button[data-testid="send-button"]' || selector === 'button[data-testid*="send" i]') {
+          if (globalSendDecoy) return [globalDecoyButton, sendButton];
+          return useStructuralSendButton ? [] : [sendButton];
+        }
         if (selector === 'button[aria-label*="enviar" i]') return useStructuralSendButton ? [] : [localizedSendButton];
         if (selector === '[data-message-author-role="assistant"]' || selector === "article") return assistant;
         if (selector === "button, [role='button']" && (stopVisible || unrecognizedStopActive)) return [stopMarker];
@@ -191,10 +222,16 @@ async function harness(mode = "success", options = {}) {
     const context = vm.createContext({
       chrome, document, Date: FastDate, MutationObserver: MockMutationObserver,
       setTimeout: callback => { queueMicrotask(callback); return 1; }, clearTimeout: () => {},
-      Promise, console, queueMicrotask,
+      Promise,
+      console: { info: (...args) => diagnosticLogs.push(args), log() {}, warn() {}, error() {} },
+      queueMicrotask,
       InputEvent: class { constructor(type) { this.type = type; } }, Event: class { constructor(type) { this.type = type; } }, KeyboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
       HTMLInputElement: class {}, HTMLTextAreaElement: class {},
       getComputedStyle: node => {
+        if (replaceButtonAfterSelection && node === structuralSendButton && !buttonSwapScheduled) {
+          buttonSwapScheduled = true;
+          queueMicrotask(() => { buttonSwapActivated = true; });
+        }
         if (node === stopMarker) {
           stopVisibilityChecks++;
           const visible = unrecognizedStopActive || (stopVisible && stopVisibilityChecks <= 1);
@@ -206,7 +243,7 @@ async function harness(mode = "success", options = {}) {
     vm.runInContext(contentSource, context, { filename: "bridge/content.js" });
     const result = {
       listener: (m, s, respond) => runtimeListeners.message(m, s, respond),
-      messages: [], attempts: sendAttempts,
+      messages: [], attempts: sendAttempts, diagnostics: diagnosticLogs,
       composerText: () => input.textContent,
       originalComposerText: () => initialInput.textContent,
       assistantCount: () => assistant.length
@@ -412,6 +449,73 @@ test("submission confirmation reads the active composer after ChatGPT replaces i
   assert.equal(content.assistantCount(), 0);
   assert.equal(content.attempts.click, 1);
   assert.equal(content.attempts.keyboard, 0);
+});
+
+test("composer-scoped send control wins over a global decoy", async () => {
+  const h = await harness("success", { maxIterations: 1, globalSendDecoy: true });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(300);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report);
+  assert.equal(report.ok, true, "a valid local send button must be selected instead of the global decoy");
+  assert.equal(content.attempts.decoyClick, 0, "controls outside the composer must never be clicked");
+  assert.equal(content.attempts.click, 1);
+  assert.match(report.text, /respuesta integrada/);
+});
+
+test("a send button detached after selection is re-resolved before the first click", async () => {
+  const h = await harness("success", { maxIterations: 1, replaceButtonAfterSelection: true });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(300);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report);
+  assert.equal(report.ok, true, "a fresh button in the active composer should be used");
+  assert.equal(content.attempts.staleClick, 0, "a disconnected candidate must not receive a click");
+  assert.equal(content.attempts.click, 1, "only the fresh candidate may receive the single send click");
+  assert.equal(content.attempts.clickedButton, "scoped-fresh");
+});
+
+test("an insertion that does not enable the application send control is not submitted", async () => {
+  const h = await harness("success", { maxIterations: 1, unsyncedInsertion: true });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(150);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report);
+  assert.equal(report.ok, false);
+  assert.match(report.error, /sigue deshabilitado|No se encontró un botón de envío reconocible/);
+  assert.equal(content.attempts.click, 0, "visible text alone does not authorize a click");
+  assert.equal(content.attempts.keyboard, 0);
+});
+
+test("send failure emits bounded, content-free BRIDGE_SEND_DIAG evidence", async () => {
+  const h = await harness("success", { maxIterations: 1, ambiguousClick: true });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(300);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report);
+  assert.equal(report.ok, false);
+  assert.ok(content.diagnostics.some(args => args[0] === "[BRIDGE_SEND_DIAG]"), "a diagnostic summary must be logged on failure");
+  const serialized = JSON.stringify(content.diagnostics);
+  assert.ok(!serialized.includes("prompt sintético"), "diagnostic output must not contain message content");
+  assert.ok(serialized.includes("jobId"));
+  assert.ok(serialized.includes("button"));
+  assert.ok(serialized.includes("composer"));
 });
 
 test("a transient Stop insertion is positive evidence of submission even if the composer remains populated", async () => {
