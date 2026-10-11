@@ -56,7 +56,7 @@ function readComposerText(element) {
 }
 
 function normalizeComposerText(text) {
-  return String(text || "").replace(/\\s+/g, " ").trim();
+  return String(text || "").replace(/\s+/g, " ").trim();
 }
 
 function getInput() { return firstVisible(INPUT_SELECTORS); }
