@@ -90,7 +90,7 @@ test("control panel preserves all edited settings and tab selections until save"
   assert.match(control, /brain\.onchange=\(\)=>\{selectedBrainTabId=Number\(brain\.value\)\|\|null;brainSelectionDirty=true\}/);
   assert.match(control, /worker\.onchange=\(\)=>\{selectedWorkerTabId=Number\(worker\.value\)\|\|null;workerSelectionDirty=true\}/);
   assert.match(control, /iterationsDirty=false/);
-  assert.match(control, /if\(!iterationsDirty&&document\.activeElement!==iterations\)iterations\.value=x\.maxIterations\|\|10/);
+  assert.match(control, /if\(!iterationsDirty&&document\.activeElement!==iterations\)iterations\.value=x\.maxIterations\?\?10/);
   assert.match(control, /iterations\.addEventListener\("input",\(\)=>\{iterationsDirty=true\}\)/);
   assert.match(control, /sessionName\.addEventListener\("input",\(\)=>\{sessionNameDirty=true\}\)/);
   assert.match(control, /brainTimeout\.addEventListener\("input",\(\)=>\{brainTimeoutDirty=true\}\)/);
@@ -98,5 +98,5 @@ test("control panel preserves all edited settings and tab selections until save"
   assert.match(control, /minTurnDelay\.addEventListener\("input",\(\)=>\{minTurnDelayDirty=true\}\)/);
   assert.match(control, /if\(!workerTimeoutDirty&&document\.activeElement!==workerTimeout\)workerTimeout\.value=Math\.round\(\(x\.workerTimeoutMs\|\|600000\)\/1000\)/);
   assert.match(control, /iterationsDirty=false;brainTimeoutDirty=false;workerTimeoutDirty=false;minTurnDelayDirty=false/);
-  assert.match(control, /workerTimeoutMs:\(\+workerTimeout\.value\|\|600\)\*1000/);
+  assert.match(control, /workerTimeoutMs:boundedNumber\(workerTimeout,600,5,1800\)\*1000/);
 });

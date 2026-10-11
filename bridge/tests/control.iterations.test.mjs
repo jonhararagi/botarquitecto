@@ -125,7 +125,7 @@ test("periodic polling preserves edited settings and distinct CEREBRO/OBRERO tab
   assert.equal(elements.worker.value, "11", "poll must preserve the selected OBRERO tab instead of restoring its saved tab");
   assert.notEqual(elements.brain.value, elements.worker.value, "the chosen roles must remain distinct across polling");
   assert.equal(elements.sessionName.value, "Manual test", "poll must not replace edited session name");
-  assert.equal(elements.iterations.value, "2", "poll must not replace edited iteration limit 1 with 10");
+  assert.equal(elements.iterations.value, "1", "poll must not replace edited iteration limit 1 with 10");
   assert.equal(elements.brainTimeout.value, "45", "poll must not replace edited CEREBRO timeout 45 with saved 60");
   assert.equal(elements.workerTimeout.value, "60", "poll must not replace edited OBRERO timeout 60 with saved 600");
   assert.equal(elements.minTurnDelay.value, "3", "poll must not replace edited minimum delay");
