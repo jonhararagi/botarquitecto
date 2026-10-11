@@ -358,3 +358,24 @@ test("an unrecognized visible Stop control cannot make a partial answer look com
   assert.match(session.status, /^ERROR/);
   assert.equal(session.iteration, 0, "partial output must not be accepted as a completed iteration");
 });
+
+
+test("duplicate START_TURN with the same jobId is idempotent and sends once", async () => {
+  const h = await harness("success", { maxIterations: 1 });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+  const acknowledgements = [];
+
+  content.listener(startMessage, {}, value => acknowledgements.push(value));
+  content.listener(startMessage, {}, value => acknowledgements.push(value));
+  await flush(250);
+
+  assert.equal(acknowledgements.length, 2);
+  assert.equal(acknowledgements[0].ok, true);
+  assert.equal(acknowledgements[1].ok, true, "duplicate delivery should be acknowledged without launching another run");
+  assert.equal(content.attempts.click, 1, "same jobId must not cause a second click");
+  assert.equal(content.messages.filter(message => message.type === "TURN_COMPLETE").length, 1);
+  const session = (await h.state()).sessions[0];
+  assert.equal(session.iteration, 1);
+  assert.match(session.status, /^LIMIT_REACHED/);
+});
