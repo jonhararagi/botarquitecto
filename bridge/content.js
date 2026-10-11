@@ -803,7 +803,9 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, jobId = 
     throw error;
   } finally {
     generationObserver?.disconnect();
-    emitSendDiagnostic(diagnostic, diagnosticOutcome, diagnosticErrorCode);
+    if (diagnosticOutcome === "error") {
+      emitSendDiagnostic(diagnostic, diagnosticOutcome, diagnosticErrorCode);
+    }
   }
 }
 
