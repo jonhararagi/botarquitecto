@@ -410,7 +410,8 @@ function findEnabledSendButton(input) {
   // Prefer the candidate discovered inside this composer before any document-wide
   // match. A global selector match is not proof that a control belongs to input.
   const scoped = findComposerScopedSendButton(input);
-  if (scoped && isNodeConnected(scoped) && isEnabled(scoped)) return scoped;
+  if (scoped && isNodeConnected(scoped) && isEnabled(scoped) &&
+      isSendButtonAssociated(input, scoped, scoped)) return scoped;
 
   const inputForm = input?.closest?.("form") || null;
   if (!inputForm) return null;
