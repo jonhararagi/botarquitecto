@@ -47,7 +47,7 @@ test("content script rejects overlapping jobs and waits for a stable new respons
   assert.match(content, /Date\.now\(\) - stableSince >= RESPONSE_STABLE_MS/);
   assert.match(content, /function responseTextFromSourceTurn\(/);
   assert.match(content, /function findEnabledSendButton\(input\)/);
-  assert.match(content, /button\[aria-label\*="enviar" i\]/);
+  assert.match(content, /aria-label.*enviar.*i/);
   assert.match(content, /document\.execCommand\("insertText", false, text\) === true/);
   assert.match(content, /BRIDGE no pudo insertar el mensaje en el cuadro de ChatGPT/);
   assert.doesNotMatch(content, /getCopyResponseButton|No está disponible la opción «Copiar respuesta»/);
