@@ -227,3 +227,11 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Chrome/Brave real:** `NOT_RUN`. El test reproduce la ruta de DOM/eventos con mocks; la comprobación con el perfil del usuario sigue pendiente tras instalar la actualización. No se afirma aún E2E real aprobado.
 - **Siguiente tarea única:** actualizar la copia local y recargar la extensión y ambas pestañas ChatGPT; ejecutar un único prompt de prueba y observar si el compositor/envío avanzan. PR #6 continúa abierto, `main` no se modifica.
 - **TIMER:** implementación y regresiones automatizadas aprox. 1–2 h estimadas; sincronización local 5–10 min; validación manual 10–20 min. Tiempo real medido no disponible.
+
+
+## 2026-10-11 — BRIDGE-014 · iteraciones 1
+
+- Se endurece el parseo numérico del panel para que el valor válido `1` se conserve explícitamente al guardar e iniciar.
+- La regresión de control pasa a probar `1`, no solo `2`, incluyendo el valor enviado a `SAVE_SESSION` y a `START_LOOP`.
+- CI y Chrome real: pendientes al crear este checkpoint. PR #6 permanece abierto; no se modifica `main`.
+- **TIMER:** validación CI pendiente; luego 10–20 min para prueba manual real.

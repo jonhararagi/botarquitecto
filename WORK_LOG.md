@@ -266,3 +266,13 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **CI transitoria:** run [38122091201](https://github.com/jonhararagi/botarquitecto/actions/runs/38122091201) falló únicamente en una aserción estática con coincidencia literal demasiado estricta del selector localizado; se reemplazó por una comprobación menos frágil. El run final incluye esa corrección y pasó.
 - **Validación del usuario en navegador real:** `NOT_RUN` tras el parche.
 - **TIMER:** código/pruebas automatizados 1–2 h estimadas; restan actualización local y 10–20 min de prueba real. No hay medición de tiempo real.
+
+
+## 2026-10-11 — BRIDGE-014 · iteraciones 1 y persistencia del ajuste numérico
+
+- **HEAD de entrada:** `5d6db61b4c9c9f0e53d00adb761cd68b5a9475e7`, rama `worker/bridge-001-validation`; PR #6 abierto y sin merge.
+- **Incidencia reportada:** el campo Iteraciones vuelve a mostrar 10 al intentar reducirlo. El código vigente ya protegía borradores frente al polling, pero su cobertura dinámica usaba 2 y no reproducía el valor mínimo 1.
+- **Cambio:** parser numérico explícito con límites y fallback solo para campo vacío/no numérico; tanto `SAVE_SESSION` como `START_LOOP` comparten la misma validación. Se cambia la regresión dinámica a exactamente 1 y el contrato estático exige ambas llamadas al parser.
+- **Validación:** CI de este nuevo SHA pendiente. La prueba automatizada usa DOM/mocks en Node; todavía no equivale a una prueba de la sesión real de Chrome.
+- **Próximo paso:** ejecutar CI y, si pasa, sincronizar la extensión local y recargar tanto la extensión como la pestaña del panel BRIDGE.
+- **TIMER:** parche y prueba automatizada estimados en 30–60 min; sincronización local 5–10 min; comprobación real 10–20 min. Tiempo medido no disponible.

@@ -80,6 +80,9 @@ test("manifest remains MV3 with only the intended ChatGPT hosts", async () => {
 });
 
 test("control panel preserves all edited settings and tab selections until save", async () => {
+  const boundedSetting = /function boundedNumber\(el,fallback,min,max\)/;
+  assert.match(await controlPromise, boundedSetting);
+  assert.equal((await controlPromise).split("maxIterations:boundedNumber(iterations,10,1,100)").length - 1, 2, "SAVE_SESSION and START_LOOP must use the bounded numeric parser");
   const control = await controlPromise;
   assert.match(control, /brainSelectionDirty=false,workerSelectionDirty=false/);
   assert.match(control, /fillTabs\(brain,brainSelectionDirty\?selectedBrainTabId:x\.brainTabId\)/);
