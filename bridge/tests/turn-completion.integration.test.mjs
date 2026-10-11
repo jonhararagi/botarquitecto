@@ -51,7 +51,7 @@ async function harness(mode = "success") {
     if (contents.has(tabId)) return contents.get(tabId);
     let localizedSendButton;
     const input = {
-      value: "", textContent: "",
+      textContent: "",
       get innerText() { return this.textContent; },
       focus() {},
       matches: () => false,

@@ -51,7 +51,7 @@ function isEnabled(node) {
 
 function readComposerText(element) {
   if (!element) return "";
-  if (typeof element.value === "string") return element.value;
+  if (element.matches?.("textarea, input")) return String(element.value ?? "");
   return String(element.innerText ?? element.textContent ?? "");
 }
 
