@@ -199,3 +199,17 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Chrome/Brave real:** `NOT_RUN`. Falta confirmar el resultado en el navegador del usuario después de sincronizar/recargar. No se declara validación E2E por el solo hecho de pasar CI.
 - **Siguiente tarea única:** actualizar la copia local con el HEAD documental final y ejecutar una prueba manual limitada. PR #6 permanece abierto, sin merge; `main` no se modificó.
 - **TIMER:** arreglos y pruebas automatizadas 30–60 min estimados; actualización local 5–10 min; validación manual E2E 15–30 min si ChatGPT conserva los selectores esperados. El tiempo medido no está disponible.
+
+
+## 2026-10-11 — BRIDGE-012: conservar selección de pestañas CEREBRO/OBRERO
+
+- **HEAD de código:** `ea36615b94d076db1659c566fad84f44be34e301`.
+- **CI:** [run 38119587246](https://github.com/jonhararagi/botarquitecto/actions/runs/38119587246), conclusión `success` sobre el SHA exacto.
+- **Causa corregida:** `render()` reconstruía los selectores cada 700 ms y prefería los IDs persistidos de la sesión sobre la elección reciente en el formulario. Por eso una pestaña elegida se revertía al ID anterior; los dos campos parecían no permitir asignar roles diferentes.
+- **Corrección:** banderas de edición independientes para los selectores de CEREBRO y OBRERO. Mientras una selección no se haya guardado, el polling conserva el ID elegido; al cambiar de sesión se limpian borradores, y tras guardar se reconcilia la interfaz con el estado persistido.
+- **Cobertura de regresión:** la prueba dinámica modifica ambos selectores (CEREBRO=22, OBRERO=11), fuerza polling y verifica que ambos IDs permanezcan distintos y se entreguen intactos a `SAVE_SESSION` y `START_LOOP`. Los campos de nombre, iteraciones, timeouts y espera mínima continúan cubiertos.
+- **Evidencia:** sintaxis, contratos estáticos, pruebas del service worker, timeout, formulario completo y test integrado pasan en GitHub Actions. [CI run 38119587246](https://github.com/jonhararagi/botarquitecto/actions/runs/38119587246).
+- **Chrome/Brave real:** `NOT_RUN` después de este commit; queda la validación manual del perfil del usuario tras actualizar y recargar la extensión. No declarar E2E real aprobado todavía.
+- **Estado de gobernanza:** PR #6 abierto, sin merge. `main` permanece en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- **Siguiente tarea única:** actualizar la copia local a este HEAD y probar que el selector de CEREBRO y el de OBRERO conservan dos pestañas diferentes durante polling antes de iniciar el ciclo.
+- **TIMER:** implementación y suite de regresión 30–60 min estimados; actualización local 5–10 min; validación de navegador real 10–20 min. El tiempo medido no está disponible.

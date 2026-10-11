@@ -239,3 +239,16 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **CI:** [run 38062133811](https://github.com/jonhararagi/botarquitecto/actions/runs/38062133811), `success` en el SHA exacto `6254a563f5b1de0f6b0fee10da3a7c8358c8f285`. Sintaxis, contratos estáticos, pruebas dinámicas, timeout, panel y test integrado completaron correctamente.
 - **Límite:** CI ejecuta las suites en Node con mocks y no confirma aún el comportamiento del perfil real de Chrome. Prueba manual final sigue `NOT_RUN`; no modificar `main` ni fusionar PR #6.
 - **TIMER:** cambios y pruebas automatizadas aprox. 30–60 min de trabajo técnico; quedan sincronización local y 15–30 min de prueba E2E manual. El tiempo medido no está disponible.
+
+
+## 2026-10-11 — BRIDGE-012 · los selectores de pestañas revertían las elecciones del usuario
+
+- **HEAD BEFORE:** `90bbeb1a45de131601076ac3926e722f74bf9ac7`.
+- **Commit de código:** `ea36615b94d076db1659c566fad84f44be34e301`.
+- **Archivos:** `bridge/control.js`, `bridge/tests/control.iterations.test.mjs`, `bridge/tests/validation.test.mjs`.
+- **Causa:** en cada polling, `render()` reconstruía las listas y `fillTabs(el, x.brainTabId, selectedBrainTabId)` daba prioridad al ID persistido, por encima de la selección recién elegida. Lo mismo pasaba con OBRERO. La interfaz podía revertir la selección y enviar roles usando pestañas antiguas.
+- **Corrección:** se añaden `brainSelectionDirty` y `workerSelectionDirty`; mientras el cambio no se guarde, cada selector se vuelve a pintar usando la selección local. El cambio de sesión descarta estos borradores y un guardado exitoso limpia las banderas; el estado persistido pasa a ser la fuente de verdad después del guardado.
+- **Regresión dinámica:** la prueba selecciona CEREBRO en tab ID 22 y OBRERO en tab ID 11, provoca una actualización de estado y verifica que ambos sigan distintos; también comprueba que `SAVE_SESSION` y `START_LOOP` reciban estos mismos IDs. Mantiene cobertura para nombre, iteraciones, ambos timeouts y espera mínima.
+- **CI:** [run 38119587246](https://github.com/jonhararagi/botarquitecto/actions/runs/38119587246), `success` en SHA exacto `ea36615b94d076db1659c566fad84f44be34e301`. Sintaxis, contratos, worker dinámico, timeout, panel e integración pasan.
+- **Prueba manual real:** `NOT_RUN` tras la corrección. Requiere actualizar la carpeta local, recargar extensión y las dos páginas ChatGPT; no se declara validación real con base en Node/mocks.
+- **TIMER:** arreglo y CI 30–60 min estimados; restan 5–10 min de sync local y 10–20 min de prueba manual. Medición real de tiempo no disponible.
