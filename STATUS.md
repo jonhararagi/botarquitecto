@@ -252,3 +252,8 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **CI del nuevo SHA:** pendiente; Chrome real requiere nueva repetición manual.
 - PR #6 sigue abierto; `main` no modificado.
 - **TIMER:** 45–90 min estimados de implementación; prueba manual 10–20 min tras CI.
+
+
+### BRIDGE-015 — ajuste de contrato estático
+
+- CI inicial detectó solamente un contrato estático que escapaba en exceso los corchetes del selector de controles. Se cambió a coincidencia literal; la validación completa debe pasar en el siguiente SHA.

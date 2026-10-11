@@ -298,3 +298,9 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Prueba de regresión:** pipeline integrado CEREBRO→OBRERO con dos iteraciones; el fixture de OBRERO oculta los selectores conocidos y presenta solo un botón icon-only sin etiqueta, test-id, tipo submit ni formulario. Se exige click, `TURN_COMPLETE` y finalización en dos iteraciones.
 - **CI del nuevo SHA:** pendiente. La prueba usa DOM simulado, no la sesión real de Chrome; E2E local requiere repetición manual.
 - **TIMER:** parche y regresión estimados 45–90 min; CI y ajuste 10–30 min; prueba manual local 10–20 min. Tiempo medido no disponible.
+
+
+### BRIDGE-015 — checkpoint de CI
+
+- La primera CI del cambio `0779b772e97626ac4b18fb9f3167926b4bdb00dd`, [run 38129433637](https://github.com/jonhararagi/botarquitecto/actions/runs/38129433637), pasó sintaxis pero falló en una aserción estática demasiado escapada para el selector `button, [role='button']`. Los tests dinámicos no se ejecutaron en ese run.
+- Se sustituye esa aserción regex por una comprobación literal. La lógica productiva no cambia en este ajuste de prueba; nueva CI pendiente.
