@@ -300,7 +300,7 @@ function stripBridgeMarker(text) {
 function hasStopSemantics(node) {
   const testId = String(node?.getAttribute?.("data-testid") || "").toLowerCase();
   if (testId === "stop-button" || testId.includes("stop-generating")) return true;
-  return /\\b(stop|detener|cancel generation|cancelar generación|stop generating|detener respuesta)\\b/.test(controlLabel(node));
+  return /\b(stop|detener|cancel generation|cancelar generación|stop generating|detener respuesta)\b/.test(controlLabel(node));
 }
 
 function findVisibleStopControl() {
