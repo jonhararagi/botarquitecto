@@ -365,8 +365,8 @@ function observeGenerationStart() {
         const explicitlyHidden = Boolean(
           candidate?.hidden ||
           candidate?.getAttribute?.("aria-hidden") === "true" ||
-          candidate?.getAttribute?.("hidden") !== null ||
-          /display\\s*:\\s*none|visibility\\s*:\\s*hidden/i.test(candidate?.getAttribute?.("style") || "")
+          candidate?.getAttribute?.("hidden") != null ||
+          /display\s*:\s*none|visibility\s*:\s*hidden/i.test(candidate?.getAttribute?.("style") || "")
         );
         if (isButton && hasStopSemantics(candidate) && !explicitlyHidden &&
             (introduced || isVisible(candidate))) {
