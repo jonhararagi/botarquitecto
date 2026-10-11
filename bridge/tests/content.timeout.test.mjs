@@ -39,6 +39,7 @@ test("content script real expira un turno sin respuesta usando reloj simulado", 
   const context = vm.createContext({
     chrome, document, Date, setTimeout, clearTimeout, Promise,
     InputEvent: class { constructor() {} },
+    KeyboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
     Event: class { constructor() {} },
     getComputedStyle: () => ({ display: "block", visibility: "visible" }),
     console: { log() {}, warn() {}, error() {} }
