@@ -213,3 +213,17 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Estado de gobernanza:** PR #6 abierto, sin merge. `main` permanece en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
 - **Siguiente tarea única:** actualizar la copia local a este HEAD y probar que el selector de CEREBRO y el de OBRERO conservan dos pestañas diferentes durante polling antes de iniciar el ciclo.
 - **TIMER:** implementación y suite de regresión 30–60 min estimados; actualización local 5–10 min; validación de navegador real 10–20 min. El tiempo medido no está disponible.
+
+
+## 2026-10-11 — BRIDGE-013: recuperación del envío del prompt a ChatGPT
+
+- **HEAD de código corregido:** `cbde2e91ef883b6f89667a623f679f2c9483a838`; ajuste posterior de contrato de prueba: `dd00121d7cfd224c5f80e1b248e4660319570e93`.
+- **CI final:** [run 38122163277](https://github.com/jonhararagi/botarquitecto/actions/runs/38122163277), conclusión `success` sobre el SHA exacto `dd00121d7cfd224c5f80e1b248e4660319570e93`.
+- **Defecto informado por usuario:** `ERROR — CEREBRO — ChatGPT send button not found or disabled` inmediatamente después de escribir el prompt. Es distinto del error `TURN_COMPLETE obsoleto` anterior: en esta ocasión el script no alcanzó a enviar el turno.
+- **Corrección:** inserción de texto en contenteditable ahora comprueba el resultado de `document.execCommand("insertText")`; si devuelve `false` o no deja el texto esperado, usa un fallback de texto y dispara eventos `input/change`. Verifica que el prompt haya quedado en el compositor antes de continuar.
+- La detección del botón recorre candidatos en vez de detenerse ante el primer botón visible deshabilitado; incluye variaciones de etiquetas accesibles en inglés/español y un fallback limitado al formulario del compositor. Los errores ahora distinguen texto no insertado, botón visible pero deshabilitado y ausencia de botón reconocido.
+- **Regresión integrada:** ejecuta el content script real en un DOM simulado de contenteditable donde `execCommand` devuelve `false`, el botón antiguo de test-id sigue deshabilitado y un botón alternativo `aria-label="Enviar mensaje"` se habilita al recibirse el evento input. La integración verifica que el turno se envíe y termine; las suites de sintaxis, contratos, service worker, timeout, panel y turn-completion pasaron.
+- La primera CI de esta rama de trabajo detectó una aserción estática demasiado estricta sobre comillas CSS; se corrigió y la ejecución final pasó. No se oculta ese fallo transitorio.
+- **Chrome/Brave real:** `NOT_RUN`. El test reproduce la ruta de DOM/eventos con mocks; la comprobación con el perfil del usuario sigue pendiente tras instalar la actualización. No se afirma aún E2E real aprobado.
+- **Siguiente tarea única:** actualizar la copia local y recargar la extensión y ambas pestañas ChatGPT; ejecutar un único prompt de prueba y observar si el compositor/envío avanzan. PR #6 continúa abierto, `main` no se modifica.
+- **TIMER:** implementación y regresiones automatizadas aprox. 1–2 h estimadas; sincronización local 5–10 min; validación manual 10–20 min. Tiempo real medido no disponible.

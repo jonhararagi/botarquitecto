@@ -252,3 +252,17 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **CI:** [run 38119587246](https://github.com/jonhararagi/botarquitecto/actions/runs/38119587246), `success` en SHA exacto `ea36615b94d076db1659c566fad84f44be34e301`. Sintaxis, contratos, worker dinámico, timeout, panel e integración pasan.
 - **Prueba manual real:** `NOT_RUN` tras la corrección. Requiere actualizar la carpeta local, recargar extensión y las dos páginas ChatGPT; no se declara validación real con base en Node/mocks.
 - **TIMER:** arreglo y CI 30–60 min estimados; restan 5–10 min de sync local y 10–20 min de prueba manual. Medición real de tiempo no disponible.
+
+
+## 2026-10-11 — BRIDGE-013 · botón de envío no encontrado o deshabilitado
+
+- **HEAD BEFORE:** `298c00c9e287e910af5634cd93368136bcf5a371`.
+- **Commits:** corrección de código `48a53241abd9b5bb6b0baaba9d1fc838994e0b3c`; verificación de lectura de contenteditable/test fixture `cbde2e91ef883b6f89667a623f679f2c9483a838`; aserción estática corregida `dd00121d7cfd224c5f80e1b248e4660319570e93`.
+- **Archivos:** `bridge/content.js`, `bridge/tests/turn-completion.integration.test.mjs`, `bridge/tests/validation.test.mjs`.
+- **Diagnóstico:** el fallo reportado se producía antes del envío del turno, no en el procesamiento de `TURN_COMPLETE`. La ruta de inserción anterior ignoraba el valor booleano de `document.execCommand("insertText")`: algunas implementaciones pueden devolver `false` sin lanzar excepción y dejar el compositor vacío. A su vez, `waitForSendButton` usaba el primer candidato visible; si estaba deshabilitado, no examinaba selectores alternativos.
+- **Implementación:** el content script ahora lee el texto real según sea textarea/input o contenteditable, comprueba que coincida con el prompt, usa fallback si `execCommand` falla y genera eventos. Recorre cada selector buscando un botón visible y habilitado, reconoce etiquetas comunes en inglés y español y, como último recurso, inspecciona exclusivamente el formulario que contiene el compositor.
+- **Mensajes diagnósticos:** se distinguen prompt no insertado, botón de envío reconocido pero deshabilitado y ausencia de botón de envío reconocible.
+- **CI final:** [run 38122163277](https://github.com/jonhararagi/botarquitecto/actions/runs/38122163277), `success` sobre el SHA exacto `dd00121d7cfd224c5f80e1b248e4660319570e93`. Pasaron sintaxis, contratos, service worker dinámico, timeout, panel e integración.
+- **CI transitoria:** run [38122091201](https://github.com/jonhararagi/botarquitecto/actions/runs/38122091201) falló únicamente en una aserción estática con coincidencia literal demasiado estricta del selector localizado; se reemplazó por una comprobación menos frágil. El run final incluye esa corrección y pasó.
+- **Validación del usuario en navegador real:** `NOT_RUN` tras el parche.
+- **TIMER:** código/pruebas automatizados 1–2 h estimadas; restan actualización local y 10–20 min de prueba real. No hay medición de tiempo real.
