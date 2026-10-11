@@ -54,6 +54,8 @@ async function harness(mode = "success", options = {}) {
     const ambiguousClick = options.ambiguousClick === true && tabId === 11;
     const unrecognizedStopActive = options.unrecognizedStopActive === true && tabId === 11;
     const transientStop = options.transientStop === true && tabId === 11;
+    const preserveComposer = options.preserveComposer === true && tabId === 11;
+    const noAssistantResponse = options.noAssistantResponse === true && tabId === 11;
     const mutationObservers = [];
     class MockMutationObserver {
       constructor(callback) { this.callback = callback; this.active = false; mutationObservers.push(this); }
@@ -121,7 +123,10 @@ async function harness(mode = "success", options = {}) {
         }
         stopVisible = false;
       }
-      if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; }
+      if (!useKeyboardFallback) {
+        if (!noAssistantResponse) assistant.push(node);
+        if (!preserveComposer) input.textContent = "";
+      }
     }
     const sendButton = {
       disabled: true,
@@ -176,14 +181,19 @@ async function harness(mode = "success", options = {}) {
       getComputedStyle: node => {
         if (node === stopMarker) {
           stopVisibilityChecks++;
-          const visible = (transientStop && node.transientWasVisible) || unrecognizedStopActive || (stopVisible && stopVisibilityChecks <= 1);
+          const visible = unrecognizedStopActive || (stopVisible && stopVisibilityChecks <= 1);
           return { display: visible ? "block" : "none", visibility: "visible" };
         }
         return { display: "block", visibility: "visible" };
       }
     });
     vm.runInContext(contentSource, context, { filename: "bridge/content.js" });
-    const result = { listener: (m, s, respond) => runtimeListeners.message(m, s, respond), messages: [], attempts: sendAttempts };
+    const result = {
+      listener: (m, s, respond) => runtimeListeners.message(m, s, respond),
+      messages: [], attempts: sendAttempts,
+      composerText: () => input.textContent,
+      assistantCount: () => assistant.length
+    };
     // Observe the actual terminal reports without altering the message delivered to the worker.
     const originalSend = chrome.runtime.sendMessage;
     chrome.runtime.sendMessage = message => { result.messages.push(structuredClone(message)); return originalSend(message); };
@@ -227,6 +237,10 @@ test("TURN_COMPLETE integrado conserva identidad y rechaza respuestas incorrecta
   assert.equal(report.role, "CEREBRO");
   assert.equal(report.ok, true);
   assert.equal(report.text, "respuesta integrada", "the exact assistant response must be delivered without a copy-action button");
+  assert.equal(content.attempts.click, 1, "a valid send uses one click");
+  assert.equal(content.attempts.keyboard, 0, "a valid send does not need a fallback keypress");
+  assert.equal(content.composerText(), "", "the accepted send clears the active composer in this fixture");
+  assert.equal(content.assistantCount(), 1, "exactly one new assistant response was produced");
   const completed = (await h.state()).sessions[0];
   assert.equal(completed.iteration, 1);
   assert.match(completed.status, /^LIMIT_REACHED/);
@@ -356,6 +370,33 @@ test("a transient Stop signal is retained when the response completes before the
   assert.match(session.status, /^LIMIT_REACHED/);
 });
 
+test("a transient Stop insertion is positive evidence of submission even if the composer remains populated", async () => {
+  const h = await harness("success", {
+    maxIterations: 1,
+    transientStop: true,
+    preserveComposer: true,
+    noAssistantResponse: true
+  });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(300);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report, "the turn must terminate with an explicit result");
+  assert.equal(report.ok, false, "without an assistant response BRIDGE must never report success");
+  assert.match(
+    report.error,
+    /Timeout esperando una respuesta nueva de ChatGPT/,
+    "an observed generation-start signal should advance past send confirmation to response waiting"
+  );
+  assert.equal(content.composerText(), "prompt sintético", "the fixture keeps the composer text visible");
+  assert.equal(content.assistantCount(), 0, "no response was provided to the harness");
+  assert.equal(content.attempts.click, 1, "observing submission must not trigger a second click");
+  assert.equal(content.attempts.keyboard, 0, "observing submission must not trigger Enter");
+});
+
 test("an ambiguous post-click state never triggers a second automatic send", async () => {
   const h = await harness("success", { maxIterations: 1, ambiguousClick: true });
   const content = await h.getContent(11);
@@ -370,6 +411,9 @@ test("an ambiguous post-click state never triggers a second automatic send", asy
   assert.match(report.error, /no confirmó el envío/i);
   assert.equal(content.attempts.click, 1, "the composer receives only one automatic click");
   assert.equal(content.attempts.keyboard, 0, "do not submit again while the first click may already have been accepted");
+  assert.equal(content.composerText(), "prompt sintético", "the unsubmitted message remains in the composer");
+  assert.equal(content.assistantCount(), 0, "the no-send fixture creates no assistant response");
+  assert.equal(content.messages.filter(message => message.type === "TURN_COMPLETE").length, 1);
   const session = (await h.state()).sessions[0];
   assert.equal(session.running, false);
   assert.match(session.status, /^ERROR/);
