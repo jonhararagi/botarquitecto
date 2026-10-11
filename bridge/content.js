@@ -327,30 +327,50 @@ function observeGenerationStart() {
   const root = document.documentElement || document.body;
   if (typeof MutationObserver !== "function" || !root) return null;
 
+  let observed = false;
   let observer;
+  const observation = {
+    get observed() { return observed; },
+    disconnect() { observer?.disconnect(); }
+  };
+
   observer = new MutationObserver(records => {
-    if (generationObserved) {
+    if (observed) {
       observer.disconnect();
       return;
     }
 
     for (const record of records) {
       const candidates = [];
-      if (record.type === "attributes") candidates.push(record.target);
+      if (record.type === "attributes") {
+        candidates.push({ node: record.target, introduced: false });
+      }
       for (const added of record.addedNodes || []) {
-        candidates.push(added);
+        candidates.push({ node: added, introduced: true });
         if (added?.querySelectorAll) {
-          candidates.push(...added.querySelectorAll("button, [role='button']"));
+          candidates.push(...[...added.querySelectorAll("button, [role='button']")]
+            .map(node => ({ node, introduced: true })));
         }
       }
 
-      for (const candidate of candidates) {
+      for (const { node: candidate, introduced } of candidates) {
         const isButton = Boolean(
           candidate?.matches?.("button, [role='button']") ||
           String(candidate?.tagName || "").toLowerCase() === "button" ||
           candidate?.getAttribute?.("role") === "button"
         );
-        if (isButton && isVisible(candidate) && hasStopSemantics(candidate)) {
+        // An added Stop control may already have been removed by the time the
+        // MutationObserver callback runs. The mutation record itself is the
+        // evidence; checking current visibility here loses that transient signal.
+        const explicitlyHidden = Boolean(
+          candidate?.hidden ||
+          candidate?.getAttribute?.("aria-hidden") === "true" ||
+          candidate?.getAttribute?.("hidden") !== null ||
+          /display\\s*:\\s*none|visibility\\s*:\\s*hidden/i.test(candidate?.getAttribute?.("style") || "")
+        );
+        if (isButton && hasStopSemantics(candidate) && !explicitlyHidden &&
+            (introduced || isVisible(candidate))) {
+          observed = true;
           generationObserved = true;
           observer.disconnect();
           return;
@@ -365,7 +385,7 @@ function observeGenerationStart() {
     attributes: true,
     attributeFilter: ["aria-label", "data-testid", "title", "hidden", "aria-hidden", "style", "class"]
   });
-  return observer;
+  return observation;
 }
 
 async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutMs, minTurnDelayMs) {
@@ -410,7 +430,7 @@ async function waitForCompletedResponse(beforeNode, beforeText, sentAt, timeoutM
   );
 }
 
-async function waitForComposerSubmission(input, beforeNode, beforeText, expectedText, timeoutMs = 1800) {
+async function waitForComposerSubmission(input, beforeNode, beforeText, expectedText, generationObservation, timeoutMs = 1800) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const composerText = normalizeComposerText(readComposerText(input));
@@ -419,7 +439,8 @@ async function waitForComposerSubmission(input, beforeNode, beforeText, expected
     const responseChanged = Boolean(latestNode && latestText &&
       (latestNode !== beforeNode || latestText !== beforeText));
     const stopControl = findVisibleStopControl();
-    if (composerText !== normalizeComposerText(expectedText) || responseChanged || stopControl) {
+    if (composerText !== normalizeComposerText(expectedText) || responseChanged ||
+        stopControl || generationObservation?.observed === true) {
       return true;
     }
     await new Promise(resolve => setTimeout(resolve, 150));
@@ -442,7 +463,7 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0) {
   try {
     button.click();
 
-    const submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text);
+    const submitted = await waitForComposerSubmission(input, beforeNode, beforeText, text, generationObserver);
     if (!submitted) {
       throw new Error("ChatGPT no confirmó el envío de forma inequívoca; no se reintentó para evitar duplicar el mensaje");
     }
