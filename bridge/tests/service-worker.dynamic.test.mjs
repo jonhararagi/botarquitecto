@@ -834,3 +834,130 @@ test("saveState propaga un rechazo y permite que una solicitud posterior recuper
   assert.equal(h.persisted().bridgeStateV5.sessions[0].status, "STOPPED");
   assert.equal((await h.state()).sessions[0].status, "STOPPED");
 });
+
+
+test("cargas progresivas 1/3/5/10 respetan límite, identidad, duplicados y persistencia", async () => {
+  for (const limit of [1, 3, 5, 10]) {
+    const h = await newHarness();
+    const sessionId = (await h.state()).sessions[0].id;
+    const started = await start(h, sessionId, { maxIterations: limit });
+    assert.equal(started.ok, true, started.error);
+    assert.equal(h.sent.length, 1);
+    const seenJobs = new Set();
+
+    for (let turn = 0; turn < limit; turn++) {
+      const state = (await h.state()).sessions[0];
+      assert.equal(state.iteration, turn, `limit ${limit}, turn ${turn}: iteration is committed once before the next turn`);
+      assert.equal(state.running, true);
+      assert.ok(state.activeJobId);
+      assert.equal(seenJobs.has(state.activeJobId), false, "each dispatch has a unique job identity");
+      seenJobs.add(state.activeJobId);
+      const jobId = state.activeJobId;
+      const role = state.activeRole;
+      const senderTab = role === "CEREBRO" ? state.brainTabId : state.workerTabId;
+      const resultText = `load-${limit}-turn-${turn}-${role}`;
+
+      const result = await complete(h, state, { jobId, role, senderTab, text: resultText });
+      assert.equal(result.ok, true, result.error);
+      assert.equal(result.accepted, true);
+
+      const sendsAfterAccepted = h.sent.length;
+      const duplicate = await complete(h, state, { jobId, role, senderTab, text: resultText });
+      assert.equal(duplicate.ok, false, "the same terminal result cannot be accepted twice");
+      assert.equal(h.sent.length, sendsAfterAccepted, "duplicate completion must not dispatch another turn");
+
+      const updated = (await h.state()).sessions[0];
+      assert.equal(updated.iteration, turn + 1);
+      assert.ok(updated.log.filter(entry => entry.role === role && entry.text === resultText).length === 1);
+      if (turn + 1 < limit) {
+        assert.equal(updated.running, true);
+        assert.equal(updated.activeRole, role === "CEREBRO" ? "OBRERO" : "CEREBRO");
+        assert.notEqual(updated.activeJobId, jobId);
+        assert.equal(h.sent.length, turn + 2, "one and only one next turn is dispatched");
+      } else {
+        assert.equal(updated.running, false);
+        assert.equal(updated.activeJobId, null);
+        assert.match(updated.status, new RegExp(`^LIMIT_REACHED — ${limit} iteraciones`));
+        assert.equal(h.sent.length, limit, "the configured dispatch limit is exact");
+      }
+
+      const persisted = h.persisted().bridgeStateV5.sessions[0];
+      assert.equal(persisted.iteration, updated.iteration);
+      assert.equal(persisted.status, updated.status);
+      assert.equal(persisted.activeJobId, updated.activeJobId);
+    }
+
+    const finalState = (await h.state()).sessions[0];
+    assert.equal(finalState.iteration, limit);
+    assert.equal(finalState.log.filter(entry => ["CEREBRO", "OBRERO"].includes(entry.role)).length, limit);
+    assert.equal(seenJobs.size, limit);
+  }
+});
+
+test("dos sesiones concurrentes con cuatro pestañas mantienen estado y respuestas aislados", async () => {
+  const h = await newHarness();
+  h.tabs.set(33, { id: 33, url: "https://chat.openai.com/c/brain-b", title: "Brain B", windowId: 2 });
+  h.tabs.set(55, { id: 55, url: "https://chatgpt.com/c/worker-b", title: "Worker B", windowId: 2 });
+  const state0 = await h.state();
+  const firstId = state0.sessions[0].id;
+  const secondId = await createSession(h, "Sesión B");
+
+  assert.equal((await start(h, firstId, { maxIterations: 3 })).ok, true);
+  const secondStart = await h.call({
+    type: "START_LOOP", sessionId: secondId, brainTabId: 33, workerTabId: 55,
+    seed: "semilla sesión B", maxIterations: 3
+  });
+  assert.equal(secondStart.ok, true, secondStart.error);
+  assert.equal((await h.state()).sessions.filter(session => session.running).length, 2);
+
+  const plans = [
+    { id: firstId, tabs: [11, 22], prefix: "A" },
+    { id: secondId, tabs: [33, 55], prefix: "B" }
+  ];
+  const counts = new Map([[firstId, 0], [secondId, 0]]);
+  for (let step = 0; step < 3; step++) {
+    for (const plan of plans) {
+      const stateBefore = (await h.state()).sessions;
+      const current = stateBefore.find(session => session.id === plan.id);
+      const other = stateBefore.find(session => session.id !== plan.id);
+      assert.equal(current.iteration, step);
+      assert.equal(current.running, true);
+      const jobId = current.activeJobId;
+      const role = current.activeRole;
+      const senderTab = role === "CEREBRO" ? current.brainTabId : current.workerTabId;
+      assert.ok(plan.tabs.includes(senderTab));
+      const response = await complete(h, current, {
+        jobId, role, senderTab, text: `session-${plan.prefix}-turn-${step}`
+      });
+      assert.equal(response.ok, true, response.error);
+      counts.set(plan.id, counts.get(plan.id) + 1);
+
+      const stateAfter = (await h.state()).sessions;
+      const updated = stateAfter.find(session => session.id === plan.id);
+      const unchangedOther = stateAfter.find(session => session.id === other.id);
+      assert.equal(updated.iteration, step + 1);
+      assert.equal(unchangedOther.iteration, counts.get(other.id), "the other session's counter is independent");
+      if (step < 2) {
+        assert.equal(updated.running, true);
+        assert.equal(updated.activeRole, role === "CEREBRO" ? "OBRERO" : "CEREBRO");
+        assert.ok(plan.tabs.includes(updated.activeRole === "CEREBRO" ? updated.brainTabId : updated.workerTabId));
+      } else {
+        assert.equal(updated.running, false);
+        assert.match(updated.status, /^LIMIT_REACHED/);
+      }
+    }
+  }
+
+  const final = (await h.state()).sessions;
+  assert.equal(final.find(session => session.id === firstId).iteration, 3);
+  assert.equal(final.find(session => session.id === secondId).iteration, 3);
+  assert.equal(h.sent.length, 6, "three turns per independent session and no cross-session dispatch");
+  const persisted = h.persisted().bridgeStateV5.sessions;
+  for (const id of [firstId, secondId]) {
+    const memory = final.find(session => session.id === id);
+    const disk = persisted.find(session => session.id === id);
+    assert.equal(disk.iteration, memory.iteration);
+    assert.equal(disk.status, memory.status);
+    assert.equal(disk.activeJobId, memory.activeJobId);
+  }
+});

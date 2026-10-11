@@ -51,13 +51,19 @@ async function harness(mode = "success", options = {}) {
     if (contents.has(tabId)) return contents.get(tabId);
     const useStructuralSendButton = options.workerSendVariant === "structural" && tabId === 22;
     const useKeyboardFallback = options.keyboardFallback === true && tabId === 11;
+    const ambiguousClick = options.ambiguousClick === true && tabId === 11;
+    const unrecognizedStopActive = options.unrecognizedStopActive === true && tabId === 11;
+    const sendAttempts = { click: 0, keyboard: 0 };
     let localizedSendButton;
     let structuralSendButton;
     const composerToolbar = {
       parentElement: null,
       querySelectorAll(selector) {
-        return selector === "button, [role='button']" && structuralSendButton
-          ? [structuralSendButton] : [];
+        if (selector !== "button, [role='button']") return [];
+        const controls = [];
+        if (structuralSendButton) controls.push(structuralSendButton);
+        if (unrecognizedStopActive) controls.push(stopMarker);
+        return controls;
       }
     };
     const input = {
@@ -69,6 +75,7 @@ async function harness(mode = "success", options = {}) {
       closest() { return null; },
       compareDocumentPosition(other) { return other === structuralSendButton ? 4 : 0; },
       dispatchEvent(event) {
+        if (event.type === "keydown" && event.key === "Enter" && ambiguousClick) sendAttempts.keyboard++;
         if (event.type === "keydown" && event.key === "Enter" && useKeyboardFallback) { this.textContent = ""; assistant.push(node); }
         if (event.type === "input" && this.textContent) {
           if (localizedSendButton) localizedSendButton.disabled = false;
@@ -77,7 +84,7 @@ async function harness(mode = "success", options = {}) {
       },
       getAttribute() { return null; }
     };
-      const replyText = tabId === 22 ? "respuesta OBRERO integrada" : "respuesta integrada";
+      const replyText = options.partialResponse && tabId === 11 ? "respuesta parcial" : tabId === 22 ? "respuesta OBRERO integrada" : "respuesta integrada";
       const node = {
       innerText: replyText + " [[BRIDGE_DONE]]",
       textContent: replyText + " [[BRIDGE_DONE]]",
@@ -85,10 +92,15 @@ async function harness(mode = "success", options = {}) {
       closest() { return null; }, getAttribute() { return "assistant"; }
     };
     const assistant = [];
+    const stopMarker = {
+      disabled: false,
+      getAttribute(name) { return name === "data-testid" ? "stop-generating" : null; },
+      innerText: "", textContent: ""
+    };
     const sendButton = {
       disabled: true,
       getAttribute(name) { return name === "data-testid" ? "send-button" : null; },
-      click() { if (mode === "error") throw new Error("DOM integrado controlado"); if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     localizedSendButton = {
       disabled: true,
@@ -97,14 +109,14 @@ async function harness(mode = "success", options = {}) {
         if (name === "type") return "submit";
         return null;
       },
-      click() { if (mode === "error") throw new Error("DOM integrado controlado"); if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     structuralSendButton = {
       disabled: true,
       // Simulates an icon-only send control with no accessible label, test-id,
       // submit type, or wrapping form.
       getAttribute() { return null; },
-      click() { if (mode === "error") throw new Error("DOM integrado controlado"); if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
+      click() { sendAttempts.click++; if (mode === "error") throw new Error("DOM integrado controlado"); if (ambiguousClick) return; if (!useKeyboardFallback) { assistant.push(node); input.textContent = ""; } }
     };
     const document = {
       querySelectorAll(selector) {
@@ -113,6 +125,7 @@ async function harness(mode = "success", options = {}) {
         if (selector === 'button[data-testid="send-button"]' || selector === 'button[data-testid*="send" i]') return useStructuralSendButton ? [] : [sendButton];
         if (selector === 'button[aria-label*="enviar" i]') return useStructuralSendButton ? [] : [localizedSendButton];
         if (selector === '[data-message-author-role="assistant"]' || selector === "article") return assistant;
+        if (selector === "button, [role='button']" && unrecognizedStopActive) return [stopMarker];
         if (selector.includes("stop-button") || selector.includes("Stop") || selector.includes("Detener")) return [];
         return [];
       },
@@ -136,7 +149,7 @@ async function harness(mode = "success", options = {}) {
       getComputedStyle: () => ({ display: "block", visibility: "visible" })
     });
     vm.runInContext(contentSource, context, { filename: "bridge/content.js" });
-    const result = { listener: (m, s, respond) => runtimeListeners.message(m, s, respond), messages: [] };
+    const result = { listener: (m, s, respond) => runtimeListeners.message(m, s, respond), messages: [], attempts: sendAttempts };
     // Observe the actual terminal reports without altering the message delivered to the worker.
     const originalSend = chrome.runtime.sendMessage;
     chrome.runtime.sendMessage = message => { result.messages.push(structuredClone(message)); return originalSend(message); };
@@ -292,18 +305,56 @@ test("CEREBRO→OBRERO completes when OBRERO exposes only an icon-only composer 
 });
 
 
-test("content script retries Enter only when clicking leaves the prompt unsent", async () => {
-  const h = await harness("success", { keyboardFallback: true });
-  const brainContent = await h.getContent(11);
+test("an ambiguous post-click state never triggers a second automatic send", async () => {
+  const h = await harness("success", { maxIterations: 1, ambiguousClick: true });
+  const content = await h.getContent(11);
   const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
 
-  brainContent.listener(startMessage, {}, () => {});
-  await flush(200);
+  content.listener(startMessage, {}, () => {});
+  await flush(250);
 
-  const report = brainContent.messages.find(message => message.type === "TURN_COMPLETE");
-  assert.ok(report, "content script must report a terminal result");
-  assert.equal(report.ok, true, report.error);
-  assert.equal(report.role, "CEREBRO");
-  assert.equal(report.text, "respuesta integrada");
-  assert.ok(h.starts.some(item => item.message.type === "START_TURN" && item.tabId === 11));
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report, "ambiguous delivery must terminate with an explicit result");
+  assert.equal(report.ok, false, "unknown delivery state must fail closed instead of being resent");
+  assert.match(report.error, /no confirmó el envío/i);
+  assert.equal(content.attempts.click, 1, "the composer receives only one automatic click");
+  assert.equal(content.attempts.keyboard, 0, "do not submit again while the first click may already have been accepted");
+  const session = (await h.state()).sessions[0];
+  assert.equal(session.running, false);
+  assert.match(session.status, /^ERROR/);
+  assert.equal(h.starts.filter(item => item.message.type === "START_TURN").length, 1);
+});
+
+test("a click exception is terminal and is not retried with Enter", async () => {
+  const h = await harness("error", { maxIterations: 1, keyboardFallback: true });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(100);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report);
+  assert.equal(report.ok, false);
+  assert.match(report.error, /DOM integrado controlado/);
+  assert.equal(content.attempts.click, 1);
+  assert.equal(content.attempts.keyboard, 0);
+});
+
+test("an unrecognized visible Stop control cannot make a partial answer look complete", async () => {
+  const h = await harness("success", { maxIterations: 1, partialResponse: true, unrecognizedStopActive: true });
+  const content = await h.getContent(11);
+  const startMessage = h.starts.find(item => item.tabId === 11 && item.message.type === "START_TURN").message;
+
+  content.listener(startMessage, {}, () => {});
+  await flush(250);
+
+  const report = content.messages.find(message => message.type === "TURN_COMPLETE");
+  assert.ok(report);
+  assert.equal(report.ok, false, "an unrecognized-but-visible Stop control means generation may still be active");
+  assert.match(report.error, /Timeout esperando que terminara la respuesta de ChatGPT/);
+  const session = (await h.state()).sessions[0];
+  assert.equal(session.running, false);
+  assert.match(session.status, /^ERROR/);
+  assert.equal(session.iteration, 0, "partial output must not be accepted as a completed iteration");
 });
