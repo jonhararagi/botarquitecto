@@ -85,7 +85,11 @@ async function runUiAction({action,buttonId=null,label,messageType,operation}){
   }finally{
     activeUiAction=null;
     if(state)render(state);
-    else if(statusNotice)statusText(statusNotice.message);
+    else{
+      for(const id of UI_BUTTON_IDS){const button=document.getElementById(id);if(button)button.disabled=false;}
+      for(const id of UI_FIELD_IDS){const field=document.getElementById(id);if(field)field.disabled=false;}
+      if(statusNotice)statusText(statusNotice.message);
+    }
     applyPendingUiState();
   }
 }

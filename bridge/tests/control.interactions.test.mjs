@@ -176,3 +176,19 @@ test("el popup informa errores y vuelve a habilitar su botón tras el rechazo",a
   assert.equal(elements.refresh.disabled,false);
   assert.ok(diagnostics.some(row=>row[0]==="[BRIDGE_UI_ACTION]"&&JSON.parse(row[1]).phase==="action_failed"));
 });
+
+
+test("los botones se recuperan si el primer estado del worker nunca llegó", async () => {
+  const h = await makeControlHarness({ hangTypes: ["LIST_CHATGPT_TABS", "GET_STATE", "CREATE_SESSION"] });
+  assert.equal(h.initError, null);
+  assert.equal(h.elements.newSession.disabled, false);
+  await h.press("newSession");
+  assert.equal(h.elements.newSession.disabled, true, "the action disables controls while pending");
+  assert.equal(h.state.activeSessionId, "s1", "UI has not received a state snapshot yet");
+  h.fireTimeouts();
+  await flush();
+  assert.match(h.elements.status.textContent, /no respondió en 10 segundos/i);
+  assert.equal(h.elements.newSession.disabled, false, "unknown initial state must not leave the button disabled");
+  assert.equal(h.elements.refresh.disabled, false);
+  assert.equal(h.messages.filter(m => m.type === "CREATE_SESSION").length, 1, "there is no automatic retry");
+});
