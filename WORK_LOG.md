@@ -376,3 +376,12 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Tiempo invertido:** no medido. **Estimación restante:** CI y, después, 20–45 min para una prueba controlada por navegador.
 - **Estado:** `PARTIAL / NOT_READY`; PR #6 abierto, `main` intacta.
 - **Siguiente tarea:** ejecución manual Chrome/Brave y revisión del diagnóstico sanitizado.
+
+
+### BRIDGE-015 — reconciliación de CI (2026-10-12)
+
+- SHA exacto probado: `8a75177e3bca54d5095f5edbad6949d082b40483`.
+- CI PASS_REAL: [run PR 38198677713](https://github.com/jonhararagi/botarquitecto/actions/runs/38198677713) y [run push 38198674338](https://github.com/jonhararagi/botarquitecto/actions/runs/38198674338), ambos `success`.
+- Resultado resumido desde los logs del job: contratos estáticos 10/10; worker dinámico 32/32; timeout simulado 1/1; persistencia de panel 1/1; pruebas integradas 13/13. Total 57 pasadas, 0 fallidas.
+- La prueba de extensión real no se ejecutó en Chrome ni Brave. No declarar compatibilidad real ni causa raíz confirmada.
+- Esta entrada solo actualiza evidencia documental. PR #6 continúa abierto y sin merge; `main` no se modifica.

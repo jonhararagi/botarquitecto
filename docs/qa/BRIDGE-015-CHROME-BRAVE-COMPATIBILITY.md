@@ -88,6 +88,6 @@ Usa `PASS_REAL`/`FAIL_REAL` solo después de ejecutar el navegador y guardar evi
 - [Chrome: Manifest V3](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 - [Chrome: content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts)
 - [Chrome: declarar permisos](https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions)
-- [Brave: instalar extensiones](https://support.brave.com/hc/en-us/articles/360017909112-How-can-I-add-extensions-to-Brave)
+- [Brave: instalar extensiones](https://support.brave.app/hc/en-us/articles/360017909112-How-can-I-add-extensions-to-Brave)
 
 Mantén el PR #6 abierto y sin fusionar hasta obtener evidencia manual independiente de ambos navegadores.

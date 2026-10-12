@@ -220,4 +220,4 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 
 **Estado: PARTIAL / NOT_READY.** La auditoría no encuentra necesidad demostrable de una capa `browser/chrome`: el manifiesto es MV3, el host access se limita a ChatGPT y el código usa `chrome.*`. Se afinó la taxonomía de errores y se añadieron contratos de regresión. Esto no certifica el DOM actual de ChatGPT ni identifica la causa raíz.
 
-**Pendiente:** CI del HEAD exacto y prueba independiente real en Chrome y Brave con `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`. No fusionar el PR #6 mientras ambas pruebas sigan sin evidencia.
+**CI automatizada:** `PASS_REAL`, [run PR 38198677713](https://github.com/jonhararagi/botarquitecto/actions/runs/38198677713), SHA `8a75177e3bca54d5095f5edbad6949d082b40483`, 57/57 tests pasados. **Pendiente:** prueba real independiente en Chrome y Brave con `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`. No fusionar el PR #6 mientras ambas pruebas sigan sin evidencia.

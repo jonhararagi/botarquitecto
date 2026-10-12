@@ -307,3 +307,11 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Estado:** `PARTIAL`; PR #6 abierto sin merge, `main` intacta.
 - **TIMER:** estimación inicial del encargo 4–8 h; tiempo invertido no medido. Después de CI quedan al menos 20–45 min para una prueba controlada en cada navegador.
 - **Siguiente acción única:** ejecutar una prueba por navegador, registrar SHA/versiones y revisar evidencia sanitizada sin repetir envíos ambiguos.
+
+
+### BRIDGE-015 — verificación de CI posterior al commit (2026-10-12)
+
+- SHA probado exactamente: `8a75177e3bca54d5095f5edbad6949d082b40483`.
+- **PASS_REAL CI:** [run PR 38198677713](https://github.com/jonhararagi/botarquitecto/actions/runs/38198677713) y [run push 38198674338](https://github.com/jonhararagi/botarquitecto/actions/runs/38198674338), ambos `success`.
+- Sintaxis y pruebas automatizadas: 10/10 contratos estáticos, 32/32 service worker, 1/1 timeout con reloj simulado, 1/1 persistencia del panel y 13/13 pruebas integradas. **Total: 57/57; 0 fallidas.**
+- Esta verificación corresponde al SHA indicado. No equivale a una prueba real del navegador. Chrome real: `NOT_RUN`; Brave real: `NOT_RUN`. La causa raíz continúa sin confirmar.
