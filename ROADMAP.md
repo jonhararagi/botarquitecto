@@ -214,3 +214,10 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 - **Estado:** `PARTIAL`. `PASS_AUTOMATED` para las suites CI citadas; E2E real `NOT_RUN`.
 - **Siguiente tarea única:** validación manual supervisada conforme a `docs/qa/BRIDGE-010-PROGRESSIVE-LOAD-MANUAL.md`.
 - **TIMER:** trabajo técnico estimado 2–4 h, más 1–2 h para navegador real; tiempo efectivo no medido. Estabilización global 3–7 días provisional.
+
+
+## BRIDGE-015 — compatibilidad Chromium
+
+**Estado: PARTIAL / NOT_READY.** La auditoría no encuentra necesidad demostrable de una capa `browser/chrome`: el manifiesto es MV3, el host access se limita a ChatGPT y el código usa `chrome.*`. Se afinó la taxonomía de errores y se añadieron contratos de regresión. Esto no certifica el DOM actual de ChatGPT ni identifica la causa raíz.
+
+**Pendiente:** CI del HEAD exacto y prueba independiente real en Chrome y Brave con `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`. No fusionar el PR #6 mientras ambas pruebas sigan sin evidencia.

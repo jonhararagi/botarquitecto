@@ -194,11 +194,30 @@ function recordSendDiagnostic(diagnostic, stage, details = {}) {
   });
 }
 
-function sendFailureCode(error) {
+function sendFailureCode(error, diagnostic) {
   const message = String(error?.message || "");
-  if (/no confirmó el envío/i.test(message)) return "submission_unconfirmed";
-  if (/botón de envío|compositor de ChatGPT|insertar el mensaje/i.test(message)) return "composer_or_send_control";
-  if (/desconectado|no está conectado|no se pudo verificar/i.test(message)) return "stale_or_unassociated_send_control";
+  const stages = new Set((diagnostic?.events || []).map(event => event.stage));
+
+  // Prefer observed stages over browser-specific exception wording. Chrome and
+  // Brave can phrase equivalent DOM failures differently.
+  if (stages.has("click_threw")) return "click_failed";
+  if (stages.has("submission_unconfirmed") || /no confirmó el envío/i.test(message)) return "submission_unconfirmed";
+  if (stages.has("submission_confirmed") && /timeout esperando (?:una respuesta|que terminara la respuesta)/i.test(message)) {
+    return "response_timeout_after_submission";
+  }
+  if (/ChatGPT input not found/i.test(message)) return "composer_not_found";
+  if (/no pudo insertar el mensaje|texto no quedó correctamente insertado/i.test(message)) {
+    return "text_insertion_failed";
+  }
+  if (/sigue deshabilitado/i.test(message)) return "send_button_disabled";
+  if (/no se encontró un botón de envío reconocible/i.test(message)) return "send_button_not_found";
+  if (/compositor activo conectado al DOM/i.test(message)) return "composer_disconnected";
+  if (/compositor activo ya no contiene el mensaje esperado/i.test(message)) return "composer_text_desynchronized";
+  if (/compositor o el botón cambió antes del clic/i.test(message)) return "send_control_changed_before_click";
+  if (/botón de envío vigente y asociado|desconectado|no está conectado/i.test(message) ||
+      stages.has("pre_click_rejected")) {
+    return "send_control_unavailable_or_unassociated";
+  }
   return "send_operation_error";
 }
 
@@ -795,7 +814,7 @@ async function sendAndWait(text, timeoutMs = 60000, minTurnDelayMs = 0, jobId = 
     return responseText;
   } catch (error) {
     diagnosticOutcome = "error";
-    diagnosticErrorCode = sendFailureCode(error);
+    diagnosticErrorCode = sendFailureCode(error, diagnostic);
     recordSendDiagnostic(diagnostic, "terminal_error", {
       code: diagnosticErrorCode,
       stageCount: diagnostic.events.length

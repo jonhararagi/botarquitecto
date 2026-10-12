@@ -361,3 +361,18 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - PR #6 permanece abierto; no hubo merge y `main` sigue en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
 - **Siguiente tarea única:** validación manual supervisada en Chrome/Brave con `docs/qa/BRIDGE-010-PROGRESSIVE-LOAD-MANUAL.md`.
 - **TIMER:** tiempo efectivo no medido; auditoría/tests/correcciones estimados en 2–4 h y navegador real 1–2 h adicionales. Estabilización global provisional 3–7 días.
+
+
+## 2026-10-12 — BRIDGE-015 auditoría Chrome/Brave
+
+- **HEAD BEFORE:** `575e4cb3e9d0cb7e49bc0da065dde6a907f34cc6`; `main` observado en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR #6 abierto sin merge.
+- **Auditoría:** manifiesto, worker, content script, panel, popup, CI y suites existentes.
+- **Hallazgos:** Manifest V3; solo API `chrome.*`; permisos `tabs`/`storage`; host permissions y matches limitados a ChatGPT. No hay evidencia de incompatibilidad específica de Brave ni motivo para duplicar la API.
+- **Corrección:** `bridge/content.js` clasifica los fallos por fase y conserva `[BRIDGE_SEND_DIAG]` sin incluir prompt/respuesta. No se añaden reintentos, vías alternativas ni permisos.
+- **Tests/documentación:** ampliados contratos de `bridge/tests/validation.test.mjs` y aserciones de integración para botón deshabilitado y excepción de clic. Añadida `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`.
+- **Ejecución:** no se ejecutaron tests localmente ni una extensión real en Chrome/Brave durante esta edición. CI debe verificarse sobre el SHA final; los mocks no son evidencia real de navegador.
+- **Causa raíz:** desconocida; no atribuir a Brave sin evidencia.
+- **Seguridad:** sin cambios de permisos. Guía prohíbe desactivar Shields globalmente o repetir solicitudes ambiguas.
+- **Tiempo invertido:** no medido. **Estimación restante:** CI y, después, 20–45 min para una prueba controlada por navegador.
+- **Estado:** `PARTIAL / NOT_READY`; PR #6 abierto, `main` intacta.
+- **Siguiente tarea:** ejecución manual Chrome/Brave y revisión del diagnóstico sanitizado.

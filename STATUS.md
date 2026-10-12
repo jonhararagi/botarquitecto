@@ -294,3 +294,16 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **Gobernanza:** PR #6 continúa abierto; `main` permanece en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
 - **Siguiente paso único:** validación manual supervisada por niveles con Chrome/Brave real según `docs/qa/BRIDGE-010-PROGRESSIVE-LOAD-MANUAL.md`.
 - **TIMER:** tiempo efectivo no medido. Auditoría/tests/correcciones estimados en 2–4 h y navegador real 1–2 h adicionales; estabilización global 3–7 días provisional.
+
+
+## BRIDGE-015 — compatibilidad Chrome/Brave (2026-10-12)
+
+- **HEAD BEFORE:** `575e4cb3e9d0cb7e49bc0da065dde6a907f34cc6`; `main` observado en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR #6 abierto, base `main`.
+- **Auditoría estática:** manifiesto MV3; `service-worker.js`; content script en `document_idle`; permisos `tabs`/`storage`; host access limitado a `chatgpt.com` y `chat.openai.com`. Se usa `chrome.*`, sin dependencia de `browser.*`; no se añadieron permisos ni polyfills.
+- **Cambio técnico:** códigos diagnósticos específicos por fase. La instrumentación sigue acotada y no registra el texto del prompt ni de la respuesta.
+- **Pruebas:** contratos del manifiesto/API y aserciones de diagnóstico para botón deshabilitado y excepción de clic. CI del SHA final pendiente de consultar tras commit.
+- **Causa raíz:** no confirmada; no hay evidencia para atribuir el fallo a Brave.
+- **NOT_RUN:** carga real, compositor, envío y respuesta en Chrome y Brave. Guía: `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`.
+- **Estado:** `PARTIAL`; PR #6 abierto sin merge, `main` intacta.
+- **TIMER:** estimación inicial del encargo 4–8 h; tiempo invertido no medido. Después de CI quedan al menos 20–45 min para una prueba controlada en cada navegador.
+- **Siguiente acción única:** ejecutar una prueba por navegador, registrar SHA/versiones y revisar evidencia sanitizada sin repetir envíos ambiguos.

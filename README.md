@@ -96,3 +96,8 @@ El test automatizado de timeout prueba la expiración del polling del content sc
 ## BRIDGE-004: estado de validación de navegador
 
 La validación real de Chrome/Brave está **`NOT_RUN`** en el checkpoint BRIDGE-004 porque el conector de navegador no estaba conectado y el entorno de ejecución no tiene acceso a una instalación local. La CI de Node no demuestra suspensión natural MV3 ni comportamiento real de STOP. No se modificó código de producción sin un defecto reproducible. Ejecuta el protocolo de `docs/qa/BRIDGE-004-CHROMIUM-MANUAL.md` y registra navegador, versión, sistema operativo, estados y errores técnicos, nunca contenido privado de conversaciones.
+
+
+## BRIDGE-015: compatibilidad real Chrome/Brave
+
+El manifiesto MV3 y los permisos de Chromium se auditan con contratos automatizados. La causa raíz del fallo sigue sin confirmarse y Chrome/Brave real siguen pendientes. Consulta `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md` para probar por separado ambos navegadores, filtrar `[BRIDGE_SEND_DIAG]` y no compartir contenido privado. Los mocks no sustituyen la validación manual.

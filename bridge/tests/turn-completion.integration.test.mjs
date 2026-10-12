@@ -497,6 +497,9 @@ test("an insertion that does not enable the application send control is not subm
   assert.match(report.error, /sigue deshabilitado|No se encontró un botón de envío reconocible/);
   assert.equal(content.attempts.click, 0, "visible text alone does not authorize a click");
   assert.equal(content.attempts.keyboard, 0);
+  const diagnostic = content.diagnostics.find(args => args[0] === "[BRIDGE_SEND_DIAG]");
+  assert.ok(diagnostic, "button readiness failure must have a diagnostic");
+  assert.equal(JSON.parse(diagnostic[1]).errorCode, "send_button_disabled");
 });
 
 test("send failure emits bounded, content-free BRIDGE_SEND_DIAG evidence", async () => {
@@ -594,6 +597,9 @@ test("a click exception is terminal and is not retried with Enter", async () => 
   assert.match(report.error, /DOM integrado controlado/);
   assert.equal(content.attempts.click, 1);
   assert.equal(content.attempts.keyboard, 0);
+  const diagnostic = content.diagnostics.find(args => args[0] === "[BRIDGE_SEND_DIAG]");
+  assert.ok(diagnostic, "a click exception must have a diagnostic");
+  assert.equal(JSON.parse(diagnostic[1]).errorCode, "click_failed");
 });
 
 test("an unrecognized visible Stop control cannot make a partial answer look complete", async () => {

@@ -110,3 +110,49 @@ test("control panel preserves all edited settings and tab selections until save"
   assert.match(control, /iterationsDirty=false;brainTimeoutDirty=false;workerTimeoutDirty=false;minTurnDelayDirty=false/);
   assert.match(control, /workerTimeoutMs:boundedNumber\(workerTimeout,600,5,1800\)\*1000/);
 });
+
+
+test("Manifest V3 host grants, worker and content-script contracts remain aligned for Chromium", async () => {
+  const [manifest, worker, content] = await Promise.all([
+    manifestPromise.then(JSON.parse),
+    workerPromise,
+    contentPromise
+  ]);
+  assert.equal(manifest.manifest_version, 3);
+  assert.equal(manifest.background.service_worker, "service-worker.js");
+  assert.deepEqual([...manifest.permissions].sort(), ["storage", "tabs"]);
+  assert.deepEqual([...manifest.host_permissions].sort(), [
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*"
+  ]);
+  assert.deepEqual([...manifest.content_scripts[0].matches].sort(), [...manifest.host_permissions].sort());
+  assert.deepEqual(manifest.content_scripts[0].js, ["content.js"]);
+  assert.equal(manifest.content_scripts[0].run_at, "document_idle");
+  // Chrome and Brave expose Chromium chrome.* APIs; no browser.* shim is needed.
+  assert.match(worker, /chrome\.tabs\.sendMessage/);
+  assert.match(worker, /chrome\.runtime\.onMessage\.addListener/);
+  assert.match(content, /chrome\.runtime\.onMessage\.addListener/);
+  assert.match(content, /BRIDGE_CONTENT_READY/);
+  assert.match(content, /message\?\.type === "BRIDGE_PING"/);
+  assert.doesNotMatch(worker + "\\n" + content, /\bbrowser\.(?:runtime|tabs|storage)\b/);
+  assert.equal((worker.match(/chrome\.runtime\.onMessage\.addListener/g) || []).length, 1);
+  assert.equal((content.match(/chrome\.runtime\.onMessage\.addListener/g) || []).length, 1);
+  assert.ok(!manifest.permissions.includes("debugger"));
+  assert.ok(!manifest.permissions.includes("nativeMessaging"));
+  assert.ok(!manifest.host_permissions.some(host => host === "<all_urls>" || host === "*://*/*"));
+});
+
+test("send diagnostics define distinct, sanitized terminal categories for failure phases", async () => {
+  const content = await contentPromise;
+  assert.match(content, /function sendFailureCode\(error, diagnostic\)/);
+  for (const code of [
+    "composer_not_found", "composer_disconnected", "text_insertion_failed",
+    "composer_text_desynchronized", "send_button_disabled", "send_button_not_found",
+    "send_control_changed_before_click", "send_control_unavailable_or_unassociated",
+    "click_failed", "submission_unconfirmed", "response_timeout_after_submission"
+  ]) {
+    assert.ok(content.includes('return "' + code + '"'), "missing diagnostic category: " + code);
+  }
+  assert.match(content, /console\.info\("\[BRIDGE_SEND_DIAG\]"/);
+  assert.doesNotMatch(content, /console\.(?:info|log|warn|error)\([^\n]*(?:expectedText|responseText|message\.text)/);
+});
