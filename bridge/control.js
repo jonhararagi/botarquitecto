@@ -131,7 +131,7 @@ async function send(m){
   return r;
 }
 async function refresh(){const r=await send({type:"LIST_CHATGPT_TABS"});tabs=r.tabs||[];render(r.state)}
-sessionSelect.onchange=()=>void runUiAction({
+sessionSelect.onchange=()=>runUiAction({
   action:"select_session",label:"Cambiar sesión",messageType:"SELECT_SESSION",
   operation:async()=>{
     brainSelectionDirty=false;workerSelectionDirty=false;sessionNameDirty=false;iterationsDirty=false;brainTimeoutDirty=false;workerTimeoutDirty=false;minTurnDelayDirty=false;
@@ -148,7 +148,7 @@ iterations.addEventListener("input",()=>{iterationsDirty=true});
 brainTimeout.addEventListener("input",()=>{brainTimeoutDirty=true});
 workerTimeout.addEventListener("input",()=>{workerTimeoutDirty=true});
 minTurnDelay.addEventListener("input",()=>{minTurnDelayDirty=true});
-document.getElementById("newSession").onclick=()=>void runUiAction({
+document.getElementById("newSession").onclick=()=>runUiAction({
   action:"create_session",buttonId:"newSession",label:"Crear sesión",messageType:"CREATE_SESSION",
   operation:async()=>{
     const n=prompt("Nombre de la sesión:","Cuenta "+((state?.sessions?.length||0)+1));
@@ -157,19 +157,19 @@ document.getElementById("newSession").onclick=()=>void runUiAction({
     await refresh();
   }
 });
-deleteButton.onclick=()=>void runUiAction({
+deleteButton.onclick=()=>runUiAction({
   action:"delete_session",buttonId:"deleteSession",label:"Eliminar sesión",messageType:"DELETE_SESSION",
   operation:async()=>{
     if(!confirm("¿Eliminar esta sesión?"))return null;
     await send({type:"DELETE_SESSION",sessionId:sessionSelect.value});
   }
 });
-document.getElementById("refresh").onclick=()=>void runUiAction({
+document.getElementById("refresh").onclick=()=>runUiAction({
   action:"refresh_tabs",buttonId:"refresh",label:"Actualizar pestañas",messageType:"LIST_CHATGPT_TABS",
   operation:()=>refresh()
 });
 async function save(){const x=current();if(!x)throw Error("No hay sesión seleccionada");if(!brain.value||!worker.value)throw Error("Selecciona CEREBRO y OBRERO");if(brain.value===worker.value)throw Error("CEREBRO y OBRERO deben ser pestañas distintas");await send({type:"SAVE_SESSION",sessionId:x.id,name:sessionName.value.trim(),brainTabId:+brain.value,workerTabId:+worker.value,maxIterations:boundedNumber(iterations,10,1,100),brainTimeoutMs:boundedNumber(brainTimeout,60,5,1800)*1000,workerTimeoutMs:boundedNumber(workerTimeout,600,5,1800)*1000,minTurnDelayMs:boundedNumber(minTurnDelay,0,0,60)*1000});brainSelectionDirty=false;workerSelectionDirty=false;sessionNameDirty=false;iterationsDirty=false;brainTimeoutDirty=false;workerTimeoutDirty=false;minTurnDelayDirty=false;const saved=current();if(saved){sessionName.value=saved.name;iterations.value=saved.maxIterations??10;brainTimeout.value=Math.round((saved.brainTimeoutMs||60000)/1000);workerTimeout.value=Math.round((saved.workerTimeoutMs||600000)/1000);minTurnDelay.value=Math.round((saved.minTurnDelayMs||0)/1000)}}
-startButton.onclick=()=>void runUiAction({
+startButton.onclick=()=>runUiAction({
   action:"start_loop",buttonId:"start",label:"Activar sesión",messageType:"START_LOOP",
   operation:async()=>{
     const x=current();
@@ -184,7 +184,7 @@ for(const [id,type,label] of [
   ["pause","PAUSE","Pausar"],["resume","RESUME","Continuar"],
   ["stop","STOP","Detener"],["reset","RESET_SESSION","Limpiar sesión"]
 ]){
-  document.getElementById(id).onclick=()=>void runUiAction({
+  document.getElementById(id).onclick=()=>runUiAction({
     action:type.toLowerCase(),buttonId:id,label,messageType:type,
     operation:()=>send({type,sessionId:sessionSelect.value})
   });
