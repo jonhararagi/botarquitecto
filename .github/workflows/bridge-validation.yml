@@ -34,5 +34,7 @@ jobs:
         run: node --test bridge/tests/content.timeout.test.mjs
       - name: Run control-panel iteration persistence regression test
         run: node --test bridge/tests/control.iterations.test.mjs
+      - name: Run control and popup interaction regressions
+        run: node --test bridge/tests/control.interactions.test.mjs
       - name: Run integrated content-script and service-worker contract tests
         run: node --test bridge/tests/turn-completion.integration.test.mjs

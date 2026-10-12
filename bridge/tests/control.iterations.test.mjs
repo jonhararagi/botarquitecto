@@ -98,7 +98,7 @@ test("periodic polling preserves edited settings and distinct CEREBRO/OBRERO tab
   const context = vm.createContext({
     chrome, document, Option: class { constructor(text, value) { this.text = text; this.value = String(value); } },
     setInterval(callback) { pollCallback = callback; return 1; }, clearInterval() {},
-    console, Promise, structuredClone
+    setTimeout, clearTimeout, console, Promise, structuredClone
   });
   vm.runInContext(source, context, { filename: "bridge/control.js" });
   for (let attempt = 0; attempt < 20 && !pollCallback; attempt++) await ticks();
