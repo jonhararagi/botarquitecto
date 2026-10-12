@@ -315,3 +315,17 @@ Este checkpoint prevalece sobre las estimaciones históricas de BRIDGE-002/003 i
 - **PASS_REAL CI:** [run PR 38198677713](https://github.com/jonhararagi/botarquitecto/actions/runs/38198677713) y [run push 38198674338](https://github.com/jonhararagi/botarquitecto/actions/runs/38198674338), ambos `success`.
 - Sintaxis y pruebas automatizadas: 10/10 contratos estáticos, 32/32 service worker, 1/1 timeout con reloj simulado, 1/1 persistencia del panel y 13/13 pruebas integradas. **Total: 57/57; 0 fallidas.**
 - Esta verificación corresponde al SHA indicado. No equivale a una prueba real del navegador. Chrome real: `NOT_RUN`; Brave real: `NOT_RUN`. La causa raíz continúa sin confirmar.
+
+
+## BRIDGE-016 — interacción del panel (2026-10-12)
+
+- **SHA inicial verificado:** `d5e126c2c3f9cb64570dd45e27afeaf3e097eedf`; antes de editar, la rama y PR #6 coincidían con esa base; `main` = `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- **Hallazgo confirmado en la base:** `control.js` silenciaba errores de polling con `catch{}` y `render()` reemplazaba en cada ciclo el estado visible con el snapshot del worker. Una acción cuyo error se mostraba podía parecer inactiva al desaparecer el aviso. No se halló un ID de botón que no coincidiera con el HTML ni una capa de superposición demostrable en el CSS revisado.
+- **Corrección:** estado visible persistente para errores de acción; trazas sanitizadas `[BRIDGE_UI_ACTION]`; timeout de 10 s para mensajes del panel (8 s en popup experimental); bloqueo temporal de acciones simultáneas; restauración del estado de todos los botones/campos al terminar; comprobación previa de IDs obligatorios; error visible de inicialización/comunicación. Las acciones devuelven su promesa para mantener testeabilidad.
+- **Cobertura:** inventario de los 8 botones del panel y el botón Refresh experimental; pruebas dinámicas de acción única, cambio de sesión, ID obligatorio ausente, rechazo de comunicación, conservación del error frente al polling, timeout sin reintento, recuperación de botones y del popup. Se conserva la suite de integración de content script, incluidos los casos de compositor sustituido, botón global ajeno, botón deshabilitado, clic ambiguo y prevención de duplicados.
+- **CI del código:** `PASS_REAL`, [run 38204981854](https://github.com/jonhararagi/botarquitecto/actions/runs/38204981854), SHA `d8b723376b1388884df9ea0513165579594ac32e`. Sintaxis y suites: 10/10 contratos estáticos, 32/32 worker, 1/1 timeout simulado, 1/1 persistencia de panel, 7/7 interacción panel/popup y 13/13 integración content/worker: **64/64**, 0 fallidas.
+- **Causa raíz global:** el ocultamiento de los errores del panel está demostrado y corregido. No está demostrado todavía que ese sea el único motivo de los clics sin respuesta en la instalación real. La causa exacta del fallo de envío de ChatGPT sigue pendiente de `[BRIDGE_SEND_DIAG]` real.
+- **Validación real:** Chrome `NOT_RUN`; Brave `NOT_RUN`. Los mocks no equivalen a validar el navegador ni el DOM actual de ChatGPT.
+- **Gobernanza:** PR #6 permanece abierto, sin fusionar. `main` no se modificó.
+- **TIMER:** la estimación inicial fue 4–8 h de revisión/corrección/pruebas; tiempo efectivo no medido. Queda 20–45 min para los pasos manuales en ambos navegadores y el análisis técnico que surja.
+- **Siguiente acción única:** probar cada navegador una vez con el SHA final, registrar `[BRIDGE_UI_ACTION]` y `[BRIDGE_SEND_DIAG]` sanitizados y no repetir un envío ambiguo.

@@ -221,3 +221,12 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 **Estado: PARTIAL / NOT_READY.** La auditoría no encuentra necesidad demostrable de una capa `browser/chrome`: el manifiesto es MV3, el host access se limita a ChatGPT y el código usa `chrome.*`. Se afinó la taxonomía de errores y se añadieron contratos de regresión. Esto no certifica el DOM actual de ChatGPT ni identifica la causa raíz.
 
 **CI automatizada:** `PASS_REAL`, [run PR 38198677713](https://github.com/jonhararagi/botarquitecto/actions/runs/38198677713), SHA `8a75177e3bca54d5095f5edbad6949d082b40483`, 57/57 tests pasados. **Pendiente:** prueba real independiente en Chrome y Brave con `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`. No fusionar el PR #6 mientras ambas pruebas sigan sin evidencia.
+
+
+## BRIDGE-016 — interacción y botones
+
+**Estado: PARTIAL.** La causa por la que el panel parecía no reaccionar está parcialmente aislada: el polling silenciaba errores de comunicación y el render reemplazaba el estado de error con un snapshot viejo. El código ahora mantiene los errores visibles, instrumenta el recorrido del clic, usa timeout y bloquea/restaura los controles de forma coherente.
+
+**CI:** [run 38204981854](https://github.com/jonhararagi/botarquitecto/actions/runs/38204981854), success sobre SHA `d8b723376b1388884df9ea0513165579594ac32e`, 64/64 tests. La suite de contenido mantiene las pruebas de compositor y envío ambiguo sin duplicación.
+
+**Pendiente:** aún no se ha reproducido la instalación real en Chrome/Brave. La causa raíz exacta del envío a ChatGPT requiere `[BRIDGE_SEND_DIAG]` real y, si falla antes de llegar a `sendAndWait`, los errores de inicialización/mensajería `[BRIDGE_UI_ACTION]`. No fusionar PR #6.

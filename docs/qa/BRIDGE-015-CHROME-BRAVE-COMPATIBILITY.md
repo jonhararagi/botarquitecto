@@ -91,3 +91,75 @@ Usa `PASS_REAL`/`FAIL_REAL` solo después de ejecutar el navegador y guardar evi
 - [Brave: instalar extensiones](https://support.brave.app/hc/en-us/articles/360017909112-How-can-I-add-extensions-to-Brave)
 
 Mantén el PR #6 abierto y sin fusionar hasta obtener evidencia manual independiente de ambos navegadores.
+
+
+---
+
+# BRIDGE-016 · Reparación del flujo de interacción y botones
+
+**Estado técnico:** automatización en CI aprobada; prueba real en Chrome/Brave pendiente.
+
+## Hallazgo confirmado en el código del panel
+
+En el SHA base `d5e126c2c3f9cb64570dd45e27afeaf3e097eedf`, el panel realizaba polling de estado cada 700 ms y `render()` volvía a establecer el estado visual desde el snapshot del worker. La función `poll()` silenciaba por completo los errores de comunicación con `catch{}`. Por eso, un fallo de acción que primero colocaba un mensaje `ERROR` podía ser reemplazado por el estado anterior, y una caída de comunicación del polling quedaba sin aviso. El código registraba los listeners en la página, pero no daba una señal fiable de que la acción hubiese terminado correctamente.
+
+Se corrigió con avisos de estado persistentes frente al polling normal, mensajes de inicio/resultado/error con el marcador `[BRIDGE_UI_ACTION]`, timeout de la petición desde el panel, estado temporal visible mientras hay una operación, bloqueo de acciones simultáneas y restauración del estado de controles al terminar o fallar. La inicialización comprueba los IDs obligatorios antes de registrar listeners y comunica los que falten. No se registran prompts ni respuestas. Esta evidencia confirma el defecto del panel y su corrección bajo mocks; no demuestra todavía qué ocurre en el navegador real del usuario.
+
+## Inventario de botones
+
+| ID / etiqueta | Definición | Listener y mensaje | Resultado esperado | Error/recuperación |
+|---|---|---|---|---|
+| `newSession` / «＋ Nueva» | `bridge/control.html` | `control.js` → `CREATE_SESSION`, luego `LIST_CHATGPT_TABS` | Crear y seleccionar la sesión nueva | Cancelar el diálogo no envía; rechazo/timeout visible; botón se restaura |
+| `deleteSession` / «Eliminar» | `bridge/control.html` | `control.js` → confirmación y `DELETE_SESSION` | Eliminar la sesión elegida, si el worker lo permite | Cancelar no envía; error visible |
+| `refresh` / «Actualizar pestañas» | `bridge/control.html` | `control.js` → `LIST_CHATGPT_TABS` | Actualizar lista de pestañas y snapshot | Error de comunicación visible; se puede volver a pulsar tras comprobar el estado |
+| `start` / «ACTIVAR SESIÓN» | `bridge/control.html` | `control.js` → `SAVE_SESSION`, valida semilla y envía `START_LOOP` | Guardar los ajustes e iniciar el ciclo | Validaciones o errores se muestran; en timeout revisar estado antes de volver a activar |
+| `pause` / «PAUSAR» | `bridge/control.html` | `control.js` → `PAUSE` | Pausar según la máquina de estados del worker | Resultado o error visible; estado del botón restaurado |
+| `resume` / «CONTINUAR» | `bridge/control.html` | `control.js` → `RESUME` | Reanudar según estado del worker | Resultado o error visible; sin reintento automático |
+| `stop` / «DETENER» | `bridge/control.html` | `control.js` → `STOP` | Detener la sesión e invalidar el trabajo activo en el worker | Error visible en vez de quedar oculto por polling |
+| `reset` / «LIMPIAR» | `bridge/control.html` | `control.js` → `RESET_SESSION` | Reiniciar estado de la sesión si está inactiva | Error visible; no oculta rechazo del worker |
+| `refresh` / «Refresh» experimental | `bridge/popup.html` | `popup.js` → `LIST_CHATGPT_TABS` | Mostrar número y títulos de pestañas ChatGPT | Error visible, timeout y botón reactivado |
+
+El manifiesto no declara `default_popup`: al pulsar el icono de extensión, el listener `chrome.action.onClicked` abre/focaliza `bridge/control.html`. La vista `popup.html` es una página experimental separada, no el panel que se abre por defecto desde el icono.
+
+## Otros controles interactivos
+
+- `session`: `onchange` envía `SELECT_SESSION` y vuelve a consultar las pestañas.
+- `brain` y `worker`: cambian las selecciones locales; se validan para que sean dos pestañas distintas y se guardan mediante `SAVE_SESSION`.
+- `sessionName`, `iterations`, `brainTimeout`, `workerTimeout` y `minTurnDelay`: sus eventos `input` marcan los valores como editados para que el polling no los reemplace hasta guardar.
+- `seed`: contiene el mensaje inicial únicamente en la interfaz y se pasa en `START_LOOP`; los eventos de diagnóstico excluyen el texto.
+
+## Cadena de diagnóstico
+
+En la consola de la pestaña `control.html`, filtra `[BRIDGE_UI_ACTION]`. Los eventos indican `listener_invoked`, `action_started`, `message_send_started`, `message_response_received`, `message_transport_failed`, `message_rejected_by_receiver`, `action_completed` o `action_failed`. Solo se incluyen el nombre de la acción, el tipo de mensaje, la fase, si el worker aceptó la respuesta y el nombre de la excepción. No se registra el payload del mensaje.
+
+En la consola de la pestaña de ChatGPT, filtra por separado `[BRIDGE_SEND_DIAG]` para el diagnóstico del compositor y de la acción de envío. El diagnóstico del panel no sustituye el del content script, y el retorno de `.click()` no demuestra que ChatGPT aceptara el prompt.
+
+## Verificación automatizada BRIDGE-016
+
+El código y las pruebas se ejecutaron sobre SHA `d8b723376b1388884df9ea0513165579594ac32e` en [GitHub Actions run 38204981854](https://github.com/jonhararagi/botarquitecto/actions/runs/38204981854): sintaxis y las seis suites pasaron. La nueva suite cubre inventario/IDs/listeners, acción única por botón, cambio de sesión, control obligatorio ausente, error que persiste frente a polling, timeout sin reintento y recuperación de popup. La suite de integración anterior del content script sigue comprobando botón global ajeno, botón obsoleto, inserción sin sincronización, botón deshabilitado, confirmación válida y envío ambiguo sin duplicados.
+
+## Matriz manual por navegador
+
+| Prueba | Chrome | Brave |
+|---|---|---|
+| El icono de extensión abre `control.html` | `NOT_RUN` | `NOT_RUN` |
+| El botón Actualizar pestañas muestra un resultado | `NOT_RUN` | `NOT_RUN` |
+| Nueva sesión / Eliminar muestran efecto | `NOT_RUN` | `NOT_RUN` |
+| Pausar / Continuar / Detener / Limpiar muestran efecto | `NOT_RUN` | `NOT_RUN` |
+| Rechazo de comunicación deja error visible | `NOT_RUN` | `NOT_RUN` |
+| Timeout recupera los controles | `NOT_RUN` | `NOT_RUN` |
+| Content script y worker se comunican | `NOT_RUN` | `NOT_RUN` |
+| Compositor detectado e inserción sincronizada | `NOT_RUN` | `NOT_RUN` |
+| Envío confirmado sin duplicados | `NOT_RUN` | `NOT_RUN` |
+| Diagnóstico de fallo sin contenido privado | `NOT_RUN` | `NOT_RUN` |
+
+## Pasos manuales pendientes
+
+1. Actualiza la rama `worker/bridge-001-validation` al SHA publicado; si `git status --short` muestra cambios locales, consérvalos y no los sobrescribas.
+2. Abre `chrome://extensions` en Chrome o `brave://extensions` en Brave, activa el modo desarrollador, carga la carpeta `bridge/` si no está instalada y pulsa **Recargar**.
+3. Recarga la pestaña de ChatGPT. Pulsa **Actualizar pestañas** desde `control.html`; verifica que el estado cambie y que no queden controles permanentemente deshabilitados.
+4. En DevTools de `control.html`, filtra `[BRIDGE_UI_ACTION]`. Usa los botones administrativos sobre una sesión de prueba sin ejecutar aún un prompt. Comprueba que cada clic tenga un único `listener_invoked`, un resultado terminal y que el botón vuelva a su estado normal.
+5. Haz una sola prueba de envío por navegador con `Responde únicamente con el número 1`, con una iteración. En la pestaña de ChatGPT filtra `[BRIDGE_SEND_DIAG]`. Si el estado del envío es ambiguo, no repitas el prompt, no pulses Enter ni lo envíes manualmente hasta verificar el historial.
+6. Registra versión exacta del navegador, SHA, resultado y el JSON técnico sanitizado. No compartas prompts, respuestas, cookies, tokens ni conversaciones.
+
+**Conclusión:** el fallo de observabilidad del panel queda corregido y probado con mocks. El motivo específico por el que la versión instalada no actuaba en la máquina del usuario, y el estado real del botón de envío de ChatGPT, requieren todavía prueba en Chrome/Brave. Resultado global `PARTIAL`.

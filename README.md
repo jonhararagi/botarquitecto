@@ -101,3 +101,8 @@ La validación real de Chrome/Brave está **`NOT_RUN`** en el checkpoint BRIDGE-
 ## BRIDGE-015: compatibilidad real Chrome/Brave
 
 El manifiesto MV3 y los permisos de Chromium se auditan con contratos automatizados. La causa raíz del fallo sigue sin confirmarse y Chrome/Brave real siguen pendientes. Consulta `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md` para probar por separado ambos navegadores, filtrar `[BRIDGE_SEND_DIAG]` y no compartir contenido privado. Los mocks no sustituyen la validación manual.
+
+
+## BRIDGE-016: flujo de interacción
+
+El panel ahora conserva errores de acción aunque el polling siga actualizando el estado, registra eventos sanitizados `[BRIDGE_UI_ACTION]`, muestra timeouts y restaura los controles al finalizar. Inventario y guía de prueba por navegador: `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`. El CI pasa en SHA `d8b723376b1388884df9ea0513165579594ac32e` con 64/64 pruebas. Chrome y Brave reales todavía quedan `NOT_RUN`; la causa exacta de envío en ChatGPT no se confirma con mocks.

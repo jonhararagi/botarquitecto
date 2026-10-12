@@ -385,3 +385,16 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - Resultado resumido desde los logs del job: contratos estáticos 10/10; worker dinámico 32/32; timeout simulado 1/1; persistencia de panel 1/1; pruebas integradas 13/13. Total 57 pasadas, 0 fallidas.
 - La prueba de extensión real no se ejecutó en Chrome ni Brave. No declarar compatibilidad real ni causa raíz confirmada.
 - Esta entrada solo actualiza evidencia documental. PR #6 continúa abierto y sin merge; `main` no se modifica.
+
+
+## 2026-10-12 — BRIDGE-016: reparar la cadena del clic
+
+- **HEAD inicial:** `d5e126c2c3f9cb64570dd45e27afeaf3e097eedf`; `main` se mantuvo en `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`; PR #6 abierto sin merge.
+- **Causa del fallo aparente del panel confirmada por inspección y regresión:** el polling silencioso `catch{}` escondía errores de comunicación y el render periódico sobrescribía el aviso de error de la última acción. Se registraban listeners para los botones existentes, pero un error podía quedar oculto detrás del estado viejo. La causa exacta del envío de ChatGPT en navegador real no está confirmada.
+- **Cambios de código:** `bridge/control.js` mantiene un aviso de error mientras poll consulta el worker, comunica fase/resultado mediante `[BRIDGE_UI_ACTION]`, limita la espera de mensajería, bloquea acciones concurrentes y restaura los estados base de botones/campos en éxito/error/timeout. Verifica los IDs requeridos al inicializar. `bridge/control.html` usa tipo explícito de botón, foco visible y status live region. `bridge/popup.js` expone error/timeout y recupera su botón; el popup es experimental y no es el view por defecto de la acción del manifiesto.
+- **Pruebas:** nueva `bridge/tests/control.interactions.test.mjs`; actualización del test de persistencia para proporcionar timeout de mensajería al entorno VM; workflow ejecuta la suite nueva. La integración previa de ChatGPT no se elimina.
+- **SHA con CI verde:** `d8b723376b1388884df9ea0513165579594ac32e`; GitHub Actions [run 38204981854](https://github.com/jonhararagi/botarquitecto/actions/runs/38204981854), success. Tests: 10 + 32 + 1 + 1 + 7 + 13 = **64/64 pasaron**.
+- **Errores de test detectados durante el trabajo:** el primer CI mostró que el wrapper debía conservar la promesa que devolvía el antiguo click handler; se corrigió sin retirar la prueba. El siguiente CI reveló que se deshabilitaban todos los controles pero no se restauraban; el render ahora recompone los estados base y la prueba de timeout/comunicación lo comprueba.
+- **Validación real:** Chrome/Brave no ejecutados en esta sesión; no declarar PASS de navegador.
+- **Archivos:** `bridge/control.js`, `bridge/control.html`, `bridge/popup.js`, `bridge/popup.html`, `bridge/tests/control.interactions.test.mjs`, `bridge/tests/control.iterations.test.mjs`, `.github/workflows/bridge-validation.yml`; esta guía y los documentos de gestión añaden el inventario y protocolo BRIDGE-016.
+- **Siguiente tarea única:** ejecutar una validación manual por navegador y usar los dos canales de diagnóstico para separar el fallo del panel del envío de ChatGPT.
