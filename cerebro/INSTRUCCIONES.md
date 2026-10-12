@@ -29,6 +29,15 @@ BRIDGE coordina sesiones CEREBRO ↔ OBRERO entre pestañas ChatGPT en un mismo 
 - El porcentaje global es una estimación orientativa derivada de hitos verificables, nunca una medición objetiva de calidad. No aumentarlo por documentación solamente.
 - El agente que ejecuta órdenes como OBRERO no redefine la arquitectura ni se asigna tareas nuevas por cuenta propia. CEREBRO planifica y audita; OBRERO implementa y reporta.
 
+## Persistencia de continuidad entre conversaciones y agentes
+- Todo informe producido o recibido por CEREBRO/OBRERO debe quedar persistido en un handoff versionado, incluso cuando el resultado sea `BLOCKED`, `PARTIAL`, auditoría sin cambios o investigación inconclusa.
+- Guardar el informe en `docs/handoff/<TASK-ID>.md` o en el directorio de handoffs propio del repositorio objetivo. Si todavía no se conoce el repositorio del proyecto investigado, guardar la nota en el repositorio de coordinación y etiquetarla explícitamente como externa/provisional; no atribuirla al proyecto no identificado.
+- Cada handoff debe incluir objetivo, repositorio/branch/HEAD verificados, evidencia, limitaciones, archivos tocados/no tocados, pruebas o CI ejecutados/no ejecutados y una sola siguiente tarea.
+- Añadir una entrada a `WORK_LOG.md` con enlace al handoff y referencia a HEAD BEFORE/AFTER. No declarar que el registro está guardado hasta comprobar que el archivo se puede leer desde GitHub.
+- Al iniciar una conversación nueva o cambiar de agente, leer primero el handoff de la tarea activa y comprobar el HEAD remoto. No pedir al usuario que vuelva a pegar un informe que ya está guardado y accesible.
+- Si una herramienta no permite guardar o verificar la documentación, indicarlo explícitamente en el informe final; no insinuar que la persistencia ocurrió.
+- No actualizar el estado funcional de un producto (por ejemplo, `STATUS.md`) con informes de otro proyecto salvo que exista una sección de coordinación expresamente designada.
+
 ## Calidad y licencias
 - Estudiar proyectos comparables para aprender patrones, fallos y soluciones; adaptar ideas, no copiar código de forma automática.
 - Antes de reutilizar código, imágenes, iconos, fuentes, textos o dependencias, registrar origen, licencia, versión, atribución exigida, modificaciones y ubicación.

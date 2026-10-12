@@ -13,6 +13,17 @@
 - **Resultado:** documentación de continuidad inicial persistida; no es un release ni certifica preparación de producción.
 - **TIMER:** documentación 20–40 min; tarea técnica siguiente 2–4 h de implementación, 1–2 h pruebas automatizadas y 30–60 min de validación de navegador si el entorno está disponible.
 
+## 2026-10-12 — IA-CHAN-REPO-DISCOVERY-001 · repositorio no identificado
+
+- **Estado:** `BLOCKED — IA_CHAN_REPOSITORY_NOT_IDENTIFIED`.
+- **HEAD BEFORE:** `525cf1a5b666a95f1389a26a3f8d3282b17f10fc`.
+- **Handoff persistido:** [`docs/handoff/IA-CHAN-REPO-DISCOVERY-001.md`](https://github.com/jonhararagi/botarquitecto/blob/main/docs/handoff/IA-CHAN-REPO-DISCOVERY-001.md), commit `221b99f8339862fe4f09543e76c48a89c18d8706`.
+- **HEAD confirmado al crear el handoff:** `221b99f8339862fe4f09543e76c48a89c18d8706`; este commit añadió solo el documento de handoff.
+- **Resultado:** no se identificó el repositorio de IA-chan. `botarquitecto` es BRIDGE, `vtuber` es un candidato débil y no se deben mezclar los dos proyectos.
+- **Alcance:** documentación únicamente; no se modificó código de IA-chan. No se ejecutaron tests, CI ni workflows.
+- **Limitación:** búsqueda global de código incompleta por falta de indexación en los repositorios consultados; ramas antiguas, otras cuentas y proyectos locales no quedan descartados.
+- **Siguiente tarea única:** `IA-CHAN-REPO-DISCOVERY-002 — RESOLVE TARGET FROM USER-PROVIDED POINTER`. Requiere un enlace, nombre parcial, commit/PR/rama antigua o confirmación de que el proyecto solo existe en Windows. No repetir el mismo descubrimiento sin nueva evidencia.
+
 ## Formato de próximas entradas
 
 Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, commits, comandos ejecutados, evidencia etiquetada, limitaciones, TIMER y una sola siguiente tarea.
