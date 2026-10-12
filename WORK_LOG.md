@@ -35,7 +35,7 @@ Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, com
 - **Parecido parcial:** `motowaifus/cari-studio` contiene Python, memoria persistente, pipeline de IA y TwitchIO, pero se identifica como VTuber Cari y no muestra el bot Telegram/Biblia solicitado. No se declara candidato confirmado.
 - **Limitaciones:** las 54 ramas de `animeart` fueron enumeradas pero no recorridas una por una; su README y árbol predeterminado identifican un editor web/Android sin Python. Gists y colecciones de tags no pudieron consultarse mediante el conector. Otras cuentas/repositorios sin conexión y copias locales de Windows permanecen fuera del alcance.
 - **Handoff:** [`docs/handoff/IA-CHAN-REPO-DISCOVERY-002.md`](https://github.com/jonhararagi/botarquitecto/blob/main/docs/handoff/IA-CHAN-REPO-DISCOVERY-002.md).
-- **HEAD AFTER:** se verificará tras el commit documental.
+- **HEAD AFTER:** `8b5fca3d75e896da5be88874b8fc77f57addf2ef` (commit que persistió el handoff y esta entrada).
 - **Cambios:** únicamente este handoff y esta entrada en `WORK_LOG.md`; sin código de producto, tests, CI ni workflows.
 - **Evidencia:** `PASS_REAL` para consultas de inventario/árboles remotos; `PASS_STATIC` para evaluación de rutas y README; `NOT_RUN` para tests/CI; estado de identificación `BLOCKED`.
 - **TIMER:** implementación documental 15–25 min; validación de persistencia 5–10 min; auditoría de arquitectura 0 h hasta identificar el repositorio.

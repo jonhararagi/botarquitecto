@@ -10,7 +10,7 @@
 - **Repositorio:** [jonhararagi/botarquitecto](https://github.com/jonhararagi/botarquitecto)
 - **Rama:** `main`
 - **HEAD BEFORE:** `a998ed3f4a77e526fbda1772e6e00de368c89c4d`
-- **HEAD AFTER:** se registrará en el commit documental de este handoff y su entrada en `WORK_LOG.md`.
+- **HEAD AFTER (persistencia documental principal):** `8b5fca3d75e896da5be88874b8fc77f57addf2ef`.
 - **Evidencia:** consulta remota de `/repos/jonhararagi/botarquitecto/branches/main`; el HEAD cambió desde el valor registrado en DISCOVERY-001. No se modificó ninguna rama de producto.
 
 ## Método y cobertura
