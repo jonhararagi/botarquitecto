@@ -27,3 +27,16 @@
 ## Formato de próximas entradas
 
 Cada entrada debe registrar fecha, ID de tarea, HEAD BEFORE/AFTER, archivos, commits, comandos ejecutados, evidencia etiquetada, limitaciones, TIMER y una sola siguiente tarea.
+
+## 2026-10-12 — IA-CHAN-REPO-DISCOVERY-002 · búsqueda ampliada bloqueada
+
+- **HEAD BEFORE:** `a998ed3f4a77e526fbda1772e6e00de368c89c4d`.
+- **Resultado:** se enumeraron 9 repositorios accesibles desde la conexión personal (1 repositorio duplicado en la otra conexión) y 237 ramas. Se inspeccionaron árboles recursivos de todas las ramas de `motowaifus`, `baseball-waifus`, `botarquitecto`, `vtuber`, `botimagen` y `wordwaifu`, más los árboles predeterminados de los 9 repositorios. No se identificó un bot Python/Telegram con las rutas `agentes/ia_chan`, `biblia` y memoria/conocimiento esperadas.
+- **Parecido parcial:** `motowaifus/cari-studio` contiene Python, memoria persistente, pipeline de IA y TwitchIO, pero se identifica como VTuber Cari y no muestra el bot Telegram/Biblia solicitado. No se declara candidato confirmado.
+- **Limitaciones:** las 54 ramas de `animeart` fueron enumeradas pero no recorridas una por una; su README y árbol predeterminado identifican un editor web/Android sin Python. Gists y colecciones de tags no pudieron consultarse mediante el conector. Otras cuentas/repositorios sin conexión y copias locales de Windows permanecen fuera del alcance.
+- **Handoff:** [`docs/handoff/IA-CHAN-REPO-DISCOVERY-002.md`](https://github.com/jonhararagi/botarquitecto/blob/main/docs/handoff/IA-CHAN-REPO-DISCOVERY-002.md).
+- **HEAD AFTER:** se verificará tras el commit documental.
+- **Cambios:** únicamente este handoff y esta entrada en `WORK_LOG.md`; sin código de producto, tests, CI ni workflows.
+- **Evidencia:** `PASS_REAL` para consultas de inventario/árboles remotos; `PASS_STATIC` para evaluación de rutas y README; `NOT_RUN` para tests/CI; estado de identificación `BLOCKED`.
+- **TIMER:** implementación documental 15–25 min; validación de persistencia 5–10 min; auditoría de arquitectura 0 h hasta identificar el repositorio.
+- **Siguiente tarea única:** `IA-CHAN-REPO-DISCOVERY-003 — LOCATE OUT-OF-SCOPE SOURCE`, requiere una nueva pista de ruta local, repositorio/commit/PR o cuenta adicional.
