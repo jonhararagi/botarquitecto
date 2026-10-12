@@ -136,7 +136,7 @@ En la consola de la pestaña de ChatGPT, filtra por separado `[BRIDGE_SEND_DIAG]
 
 ## Verificación automatizada BRIDGE-016
 
-El código y las pruebas se ejecutaron sobre SHA `d8b723376b1388884df9ea0513165579594ac32e` en [GitHub Actions run 38204981854](https://github.com/jonhararagi/botarquitecto/actions/runs/38204981854): sintaxis y las seis suites pasaron. La nueva suite cubre inventario/IDs/listeners, acción única por botón, cambio de sesión, control obligatorio ausente, error que persiste frente a polling, timeout sin reintento y recuperación de popup. La suite de integración anterior del content script sigue comprobando botón global ajeno, botón obsoleto, inserción sin sincronización, botón deshabilitado, confirmación válida y envío ambiguo sin duplicados.
+El código y las pruebas se ejecutaron sobre SHA `585e49c22e47b281d6f8a5ba72db678c79d96a6a` en [GitHub Actions run 38205211172](https://github.com/jonhararagi/botarquitecto/actions/runs/38205211172): sintaxis y las seis suites pasaron. La nueva suite (8/8) cubre inventario/IDs/listeners, acción única por botón, cambio de sesión, control obligatorio ausente, error que persiste frente a polling, timeout sin reintento, recuperación del popup y recuperación si nunca se obtuvo el primer estado del worker. La suite de integración anterior del content script sigue comprobando botón global ajeno, botón obsoleto, inserción sin sincronización, botón deshabilitado, confirmación válida y envío ambiguo sin duplicados. En total: 65/65 pruebas, 0 fallidas.
 
 ## Matriz manual por navegador
 

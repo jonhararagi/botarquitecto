@@ -227,6 +227,6 @@ Estas cifras son estimaciones de trabajo, no fechas comprometidas. La validació
 
 **Estado: PARTIAL.** La causa por la que el panel parecía no reaccionar está parcialmente aislada: el polling silenciaba errores de comunicación y el render reemplazaba el estado de error con un snapshot viejo. El código ahora mantiene los errores visibles, instrumenta el recorrido del clic, usa timeout y bloquea/restaura los controles de forma coherente.
 
-**CI:** [run 38204981854](https://github.com/jonhararagi/botarquitecto/actions/runs/38204981854), success sobre SHA `d8b723376b1388884df9ea0513165579594ac32e`, 64/64 tests. La suite de contenido mantiene las pruebas de compositor y envío ambiguo sin duplicación.
+**CI:** [run 38205211172](https://github.com/jonhararagi/botarquitecto/actions/runs/38205211172), success sobre SHA `585e49c22e47b281d6f8a5ba72db678c79d96a6a`, 65/65 tests. La suite incluye recuperación cuando la primera respuesta del worker nunca llega; la suite de contenido mantiene las pruebas de compositor y envío ambiguo sin duplicación.
 
 **Pendiente:** aún no se ha reproducido la instalación real en Chrome/Brave. La causa raíz exacta del envío a ChatGPT requiere `[BRIDGE_SEND_DIAG]` real y, si falla antes de llegar a `sendAndWait`, los errores de inicialización/mensajería `[BRIDGE_UI_ACTION]`. No fusionar PR #6.

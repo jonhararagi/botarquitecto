@@ -105,4 +105,4 @@ El manifiesto MV3 y los permisos de Chromium se auditan con contratos automatiza
 
 ## BRIDGE-016: flujo de interacción
 
-El panel ahora conserva errores de acción aunque el polling siga actualizando el estado, registra eventos sanitizados `[BRIDGE_UI_ACTION]`, muestra timeouts y restaura los controles al finalizar. Inventario y guía de prueba por navegador: `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`. El CI pasa en SHA `d8b723376b1388884df9ea0513165579594ac32e` con 64/64 pruebas. Chrome y Brave reales todavía quedan `NOT_RUN`; la causa exacta de envío en ChatGPT no se confirma con mocks.
+El panel ahora conserva errores de acción aunque el polling siga actualizando el estado, registra eventos sanitizados `[BRIDGE_UI_ACTION]`, muestra timeouts y restaura los controles al finalizar incluso si nunca llegó el primer estado del worker. Inventario y guía de prueba por navegador: `docs/qa/BRIDGE-015-CHROME-BRAVE-COMPATIBILITY.md`. El CI pasa en SHA `585e49c22e47b281d6f8a5ba72db678c79d96a6a` con 65/65 pruebas. Chrome y Brave reales todavía quedan `NOT_RUN`; la causa exacta de envío en ChatGPT no se confirma con mocks.
